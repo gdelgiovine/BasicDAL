@@ -15,7 +15,7 @@ Currenty support:
 
 BasicDAL is a "simple Data Access Layer (DAL) and ORM for .NET" that is designed to provide a lightweight and easy-to-use data access layer for .NET applications. It is an open-source project hosted on GitHub and is available for developers to use in their own projects.
 
-BasicDAL is designed to be simple to use and to provide a set of common functionality that is often needed when working with data in a .NET application. It is implemented using the ADO.NET library and is designed to be used with a variety of database engines, including Microsoft SQL Server, MySQL, and SQLite.
+BasicDAL is designed to be simple to use and to provide a set of common functionality that is often needed when working with data in a .NET application. It is implemented using the ADO.NET library and is designed to be used with a variety of database engines, including Microsoft SQL Server, MySQL, Oracle and IBM Db2.
 
 Some of the features of BasicDAL include support for executing simple and complex SQL queries, support for parameterized queries and stored procedures, and support for mapping database object to .NET objects. It also includes support for transactions and connection pooling, as well as various utility functions for working with data.
 

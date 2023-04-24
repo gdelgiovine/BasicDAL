@@ -1,4 +1,4 @@
-﻿#define COMPILEORACLE
+﻿
 
 
 using Microsoft.VisualBasic;
@@ -21,9 +21,22 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml.Serialization;
 using System.Collections.ObjectModel;
+using System.Threading;
+using Microsoft.Win32.SafeHandles;
+using System.Runtime.ConstrainedExecution;
+using System.Runtime.InteropServices;
+using System.Security.Permissions;
+using System.Security.Principal;
+using System.Security;
+using System.Linq.Expressions;
+using Org.BouncyCastle.Asn1.X509.Qualified;
+using MySqlX.XDevAPI.Common;
+using Newtonsoft.Json.Linq;
+using System.Management;
+using System.Security.Cryptography;
+using System.Management.Instrumentation;
 
-#if COMPILEORACLE
-#endif
+
 
 #pragma warning disable 1591
 
@@ -96,8 +109,8 @@ namespace BasicDAL
         private DbProviderFactory objFactory = null;
 
         //SQLSERVER
-        public string SQLServerConnectionStringBase1 = "Integrated Security=SSPI;Initial Catalog=@DBNAME@;Data Source=@SERVERNAME@;Connection timeout=@CONNECTIONTIMEOUT@;Password=@PASSWORD@";
-        public string SQLServerConnectionStringBase2 = "Initial Catalog=@DBNAME@;Data Source=@SERVERNAME@;User ID=@USERNAME@;Password=@PASSWORD@;Connection timeout=@CONNECTIONTIMEOUT@";
+        public string SQLServerConnectionStringBaseSSPI = "Integrated Security=SSPI;Initial Catalog=@DBNAME@;Data Source=@SERVERNAME@;Connection timeout=@CONNECTIONTIMEOUT@;Password=@PASSWORD@";
+        public string SQLServerConnectionStringBaseSQL = "Initial Catalog=@DBNAME@;Data Source=@SERVERNAME@;User ID=@USERNAME@;Password=@PASSWORD@;Connection timeout=@CONNECTIONTIMEOUT@";
         
         //ODBC
         public string ODBCConnectionStringBase1 = "DSN=@SERVERNAME@;Persist Security Info=False;UID=@USERNAME@";
@@ -143,6 +156,8 @@ namespace BasicDAL
 
 
         private bool mDbConnectionKeepOpen = true;
+        //private bool mDbConnectionKeepOpen = false;
+
         public bool DbConnectionKeepOpen
         {
             get
@@ -1265,9 +1280,8 @@ namespace BasicDAL
                         }
 
                     case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                         this.objFactory = Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance;
-#endif
                         break;
 
                     case Providers.ODBC:
@@ -1301,9 +1315,7 @@ namespace BasicDAL
 
                                 case "Oracle.DataAccess.Client":
                                     {
-#if COMPILEORACLE
                                         objFactory = Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance;
-#endif
                                         break;
                                     }
 
@@ -1484,9 +1496,8 @@ namespace BasicDAL
                     case Providers.OracleDataAccess:
 
                         {
-#if COMPILEORACLE
+
                             objFactory = Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance;
-#endif
                             break;
                         }
 
@@ -1522,9 +1533,8 @@ namespace BasicDAL
 
                                 case "Oracle.DataAccess.Client":
                                     {
-#if COMPILEORACLE
+
                                         _objFactory = Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance;
-#endif
                                         break;
                                     }
 
@@ -1629,9 +1639,8 @@ namespace BasicDAL
                     case Providers.OracleDataAccess:
 
                         {
-#if COMPILEORACLE
+
                             objFactory = Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance;
-#endif
                             break;
                         }
                     case Providers.ODBC:
@@ -1673,9 +1682,8 @@ namespace BasicDAL
                                     }
                                 case "Oracle.DataAccess.Client":
                                     {
-#if COMPILEORACLE
+
                                         objFactory = Oracle.ManagedDataAccess.Client.OracleClientFactory.Instance;
-#endif
                                         break;
                                     }
 
@@ -1745,11 +1753,11 @@ namespace BasicDAL
                         {
                             if (mAuthenticationMode == 1)
                             {
-                                x = Convert.ToString(SQLServerConnectionStringBase2);
+                                x = Convert.ToString(SQLServerConnectionStringBaseSSPI);
                             }
                             else
                             {
-                                x = Convert.ToString(SQLServerConnectionStringBase2);
+                                x = Convert.ToString(SQLServerConnectionStringBaseSQL);
                             }
 
                             x = x.Replace("@DBNAME@", mDatabaseName);
@@ -1763,7 +1771,10 @@ namespace BasicDAL
                         break;
                     }
 
-                case Providers.ODBC or Providers.ODBC_DB2:
+                //  case Providers.ODBC or Providers.ODBC_DB2:
+                case Providers.ODBC: 
+                case Providers.ODBC_DB2:
+
                     {
                         mParameterNamePrefix = "?";
                         mParameterNamePrefixE = "?";
@@ -1918,23 +1929,6 @@ namespace BasicDAL
                     }
 
 
-                    //case Providers.Sharepoint:
-                    //    {
-                    //        ParameterNamePrefix = "";
-                    //        x = mConnectionString;
-                    //        x = x.Replace("@USERNAME@", mUserName);
-                    //        x = x.Replace("@PASSWORD@", mPassword);
-                    //        break;
-                    //    }
-
-                    //case Providers.ConfigDefined:
-                    //    {
-                    //        ParameterNamePrefix = "?";
-                    //        x = mConnectionString;
-                    //        x = x.Replace("@USERNAME@", mUserName);
-                    //        x = x.Replace("@PASSWORD@", mPassword);
-                    //        break;
-                    //    }
             }
 
             if (x.EndsWith(";") == false)
@@ -3885,7 +3879,10 @@ namespace BasicDAL
                 {
                     switch (DbType)
                     {
-                        case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                        case DbType.AnsiString:
+                        case DbType.AnsiStringFixedLength:
+                        case DbType.String: 
+                        case DbType.StringFixedLength:
                             {
                                 if (value.ToString().Length >= Size)
                                 {
@@ -3921,9 +3918,12 @@ namespace BasicDAL
 
                 if (mDbObject.CurrentPosition >= 0)
                 {
-                    mDbObject.CurrentDataRow[mDbColumnNameE] = mValue;
-                    // Me.mDbobject.CurrentDataRow(Me.mColumnOrdinal) = mValue
-                    // Me.mDbobject.CurrentDataRow(Me.mDbColumnName) = mValue
+                    //lock (mDbObject.DataTable)
+                    {
+                        mDbObject.CurrentDataRow[mDbColumnNameE] = mValue;
+                        // Me.mDbobject.CurrentDataRow(Me.mColumnOrdinal) = mValue
+                        // Me.mDbobject.CurrentDataRow(Me.mDbColumnName) = mValue
+                    }
                 }
 
                 mDataChanged = true;
@@ -3943,7 +3943,10 @@ namespace BasicDAL
             {
                 switch (DbType)
                 {
-                    case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                    case DbType.AnsiString:
+                    case DbType.AnsiStringFixedLength:
+                    case DbType.String: 
+                    case DbType.StringFixedLength:
                         {
                             //if (Strings.Len(value) >= Size)
                             if (value.ToString().Length >= Size)
@@ -4006,7 +4009,10 @@ namespace BasicDAL
                 {
                     switch (DbType)
                     {
-                        case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                        case DbType.AnsiString:
+                        case DbType.AnsiStringFixedLength:
+                        case DbType.String: 
+                        case DbType.StringFixedLength:
                             {
 
                                 if (value.ToString().Length >= Size)
@@ -4389,7 +4395,8 @@ namespace BasicDAL
                                 break;
                             }
                         //case RuntimeUI.Wisej:
-                        case RuntimeUI.WindowsForms or RuntimeUI.Wisej:
+                        case RuntimeUI.WindowsForms: 
+                        case RuntimeUI.Wisej:
                             {
                                 if (Validation == true)
                                 {
@@ -4428,7 +4435,8 @@ namespace BasicDAL
             bool _sortable = true;
             switch (mDbType)
             {
-                case DbType.Binary or DbType.Object:
+                case DbType.Binary: 
+                case DbType.Object:
                     {
                         _sortable = false;
                         break;
@@ -4470,7 +4478,8 @@ namespace BasicDAL
         {
             switch (mDbType)
             {
-                case DbType.Binary or DbType.Object:
+                case DbType.Binary: 
+                case DbType.Object:
                     {
                         return false;
                     }
@@ -4486,7 +4495,8 @@ namespace BasicDAL
         {
             switch (mDbType)
             {
-                case DbType.Binary or DbType.Object:
+                case DbType.Binary: 
+                case DbType.Object:
                     {
                         return true;
                     }
@@ -4502,7 +4512,9 @@ namespace BasicDAL
         {
             switch (mDbType)
             {
-                case DbType.Date or DbType.DateTime or DbType.DateTime2:
+                case DbType.Date:
+                case DbType.DateTime: 
+                case DbType.DateTime2:
                     {
                         return true;
                     }
@@ -4566,7 +4578,10 @@ namespace BasicDAL
         {
             switch (mDbType)
             {
-                case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                case DbType.AnsiString:
+                case DbType.AnsiStringFixedLength:
+                case DbType.String: 
+                case DbType.StringFixedLength:
                     {
                         return true;
                     }
@@ -4582,7 +4597,10 @@ namespace BasicDAL
         {
             switch (mDbType)
             {
-                case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                case DbType.AnsiString:
+                case DbType.AnsiStringFixedLength:
+                case DbType.String: 
+                case DbType.StringFixedLength:
                     {
                         return true;
                     }
@@ -4617,7 +4635,14 @@ namespace BasicDAL
         {
             switch (mDbType)
             {
-                case DbType.Currency or DbType.Decimal or DbType.Double or DbType.Int16 or DbType.Int32 or DbType.Int64 or DbType.Single or DbType.VarNumeric:
+                case DbType.Currency:
+                case DbType.Decimal:
+                case DbType.Double:
+                case DbType.Int16:
+                case DbType.Int32:
+                case DbType.Int64:
+                case DbType.Single:
+                case DbType.VarNumeric:
                     {
                         return true;
                     }
@@ -4671,7 +4696,10 @@ namespace BasicDAL
             mDbType = DbType;
             switch (DbType)
             {
-                case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                case DbType.AnsiString:
+                case DbType.AnsiStringFixedLength:
+                case DbType.String: 
+                case DbType.StringFixedLength:
                     {
                         this.Size = Size;
                         break;
@@ -4722,7 +4750,10 @@ namespace BasicDAL
             mDbType = DbType;
             switch (DbType)
             {
-                case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                case DbType.AnsiString:
+                case DbType.AnsiStringFixedLength:
+                case DbType.String: 
+                case DbType.StringFixedLength:
 
                     {
                         this.Size = Size;
@@ -4773,7 +4804,10 @@ namespace BasicDAL
             mDbType = DbType;
             switch (DbType)
             {
-                case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                case DbType.AnsiString:
+                case DbType.AnsiStringFixedLength:
+                case DbType.String: 
+                case DbType.StringFixedLength:
 
                     {
                         this.Size = Size;
@@ -4865,7 +4899,8 @@ namespace BasicDAL
                                 BoundControl.IsEdited = false;
                                 switch (BoundControl.BindingBehaviour)
                                 {
-                                    case BindingBehaviour.ReadWrite or BindingBehaviour.ReadWriteAddNew:
+                                    case BindingBehaviour.ReadWrite: 
+                                    case BindingBehaviour.ReadWriteAddNew:
                                         {
                                             //EditedValue = Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Get);
                                             EditedValue = Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Get);
@@ -4879,10 +4914,9 @@ namespace BasicDAL
                                             {
 
                                                 case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                                                     //DBValue = BasicDalSharedCode.Cast(mDbObject.CurrentDataRow[mDbColumnNameE],DbType);
                                                     DBValue = Utilities.DbValueCast(mDbObject.CurrentDataRow[mDbColumnNameE], DbType);
-#endif
 
                                                     break;
 
@@ -5094,11 +5128,27 @@ namespace BasicDAL
         }
     }
 
+
+    public class DbObjectMappingEntity<T> where T : class, new()
+    {
+        public T Entity { get; set; }
+    
+        public DbObjectMappingEntity()
+        {
+            Entity =  new T();
+        }
+        public DbObjectMappingEntity(T Object)
+        {
+            Entity = Object;
+        }
+    }
+
+
     #region DbObject Class
     [Serializable]
     public class DbObject : IDisposable
     {
-        public ArrayList xDbColumns = new ArrayList();
+        
 
         private Dictionary<int, string> mCommandParametersSourceColumns = new Dictionary<int, string>();
         private Dictionary<int, string> mUpdateParametersSourceColumns = new Dictionary<int, string>();
@@ -5107,7 +5157,7 @@ namespace BasicDAL
         private Dictionary<int, string> mExecuteParametersSourceColumns = new Dictionary<int, string>();
         private DbDataAdapter _objAdapter;
         // MOST IMPORTANT OBJECTS
-        private DbColumns mDbColumns;
+        private DbColumns mDbColumns = null;
         private DbParameters mDbParameters;
         public int CommandTimeOut = 600;
         public string WithOptions = "";
@@ -5164,9 +5214,9 @@ namespace BasicDAL
         private DbConnection mCachedConnection;
         private DbCommand mCachedCommand;
         private string mOrderBy = "";
-        private Field[] Fields;
-        private Field[] Parameters;
-        private Join[] Joins;
+        private Field[] Fields = null;
+        private Field[] Parameters = null;
+        private Join[] Joins = null;
         private string FieldsList = " * ";
         private string ParameterList = " * ";
         private bool mDataChanged = false;
@@ -5194,11 +5244,10 @@ namespace BasicDAL
         private List<DbColumn> mDbColumnsWithValidator = new List<DbColumn>();
         private DbTransaction mDbTransaction = null;
         private DbACL mACL = new DbACL();
-        private DbAuditing DbAuditing = new DbAuditing() ;
+        private DbAuditing DbAuditing = new DbAuditing();
         private DbOrderBy mDbOrderBy = new DbOrderBy();
 
-
-
+      
 
         public struct Field
         {
@@ -5245,15 +5294,48 @@ namespace BasicDAL
 
         public delegate void DataEventBeforeEventHandler(DataEventType EventType, ref bool Cancel);
 
-        public DbObject(string Name =null)
+        public DbObject(string Name = null)
         {
-            if(Name==null)
+            if (Name == null)
             {
                 Name = System.Guid.NewGuid().ToString();
             }
             mName = Name;
         }
 
+        public object MappingEntity { get; set; }= null;
+        public void SetMappingEntity<T>(T value) where T : class
+        {
+            MappingEntity  = (T)value;
+        }
+
+        public T GetMappingEntity<T>() where T : class
+        {
+            return (T)MappingEntity ;
+        }
+
+
+
+        private Object mList = null;
+        public object List
+        {
+            get
+            {
+
+                var listType = typeof(List<>);
+                var constructedListType = listType.MakeGenericType(MappingEntity .GetType()); 
+                var mList = Activator.CreateInstance(MappingEntity.GetType());
+
+                return mList;
+
+            }
+            set
+            {
+                this.Fields = null;
+                this.FieldsList = null;
+                mList = value;
+            }
+        }
 
         public virtual DbDataAdapter objAdapter
         {
@@ -5269,6 +5351,8 @@ namespace BasicDAL
                 _objAdapter = value;
             }
         }
+
+
 
         public DbOrderBy DbOrderBy
         {
@@ -5308,7 +5392,7 @@ namespace BasicDAL
             }
         }
 
-        private DataTable _objDataTable= new DataTable();
+        private DataTable _objDataTable = new DataTable();
 
         public virtual DataTable objDataTable
         {
@@ -5408,23 +5492,48 @@ namespace BasicDAL
             }
         }
 
-        public List<T> ToList<T>() where T : class, new()
+
+        public Dictionary<string, PropertyInfo> MappingEntityDbColumnsName = new Dictionary<string, PropertyInfo>();
+        public void GetMappingEntityDbColumnsName()
+        {
+            if (this.mInterfaceMode == InterfaceModeEnum.MappingEntityPropertiesAttribute && this.MappingEntity != null)
+            {
+                foreach (PropertyInfo prop in this.MappingEntity.GetType().GetProperties())
+                {
+                    {
+                        BasicDAL.DbColumnAttributes pocoPropertyAttributes = Attribute.GetCustomAttribute(prop, typeof(DbColumnAttributes)) as DbColumnAttributes;
+                        this.MappingEntityDbColumnsName.Add(prop.Name, prop);// pocoPropertyAttributes.Name);
+                    }
+                }
+
+            }
+        }
+
+        public List<T> ToList<T>(PocoPropertyMappingMode MappingMode = PocoPropertyMappingMode.PropertyName) where T : class, new()
         {
             try
             {
                 var list = new List<T>();
                 var proplist = new List<PropertyInfo>();
+                var PocoDbColumnName = new Dictionary<string,string>();
                 var _obj = new T();
                 foreach (PropertyInfo prop in _obj.GetType().GetProperties())
-                    // MsgBox(prop.Name & " - " & prop.PropertyType.ToString())
+                // MsgBox(prop.Name & " - " & prop.PropertyType.ToString())
+                {
                     proplist.Add(prop);
+                    if (MappingMode == PocoPropertyMappingMode.PropertyAttribute )
+                    {
+                        BasicDAL.DbColumnAttributes pocoPropertyAttributes =Attribute.GetCustomAttribute(prop, typeof(DbColumnAttributes)) as DbColumnAttributes;
+                        PocoDbColumnName.Add(prop.Name, pocoPropertyAttributes.Name);
+                    }
+                }
                 object safevalue = null;
                 Type propType;
                 var obj = new T();
                 foreach (DataRow row in DataTable.AsEnumerable())
                 {
-                  
-                    
+
+
                     obj = new T();
                     foreach (PropertyInfo prop in proplist)
                     {
@@ -5432,14 +5541,23 @@ namespace BasicDAL
                         {
                             propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
                             safevalue = null;
-                            if (row[prop.Name] is DBNull == false)
+                            string propName = "";
+                            if (MappingMode == PocoPropertyMappingMode.PropertyAttribute)
                             {
-                                safevalue = row[prop.Name] is null ? null : Convert.ChangeType(row[prop.Name], propType);
+                                propName = PocoDbColumnName[prop.Name] ;
+                            }
+                            else
+                            {
+                                propName = prop.Name;
+                            }    
+                            if (row[propName] is DBNull == false)
+                                {
+                                safevalue = row[propName] is null ? null : Convert.ChangeType(row[propName], propType);
                             }
 
                             prop.SetValue(obj, safevalue, null);
                         }
-                        catch  (Exception x)
+                        catch (Exception x)
                         {
                             continue;
                         }
@@ -5456,60 +5574,175 @@ namespace BasicDAL
             }
         }
 
-        public bool FromList<T>(List<T> List) where T : class, new()
-        {
-            //if (this.objDataTable  is null)
-            //{
-            //    return false;
-            //}
 
+        //public List<T> ToList<T>(PocoPropertyMappingMode MappingMode = PocoPropertyMappingMode.PropertyName) where T : class, new()
+        //{
+        //    try
+        //    {
+        //        var list = new List<T>();
+        //        var proplist = new List<PropertyInfo>();
+        //        var PocoDbColumnName = new Dictionary<string, string>();
+        //        var _obj = new T();
+        //        foreach (PropertyInfo prop in _obj.GetType().GetProperties())
+        //        // MsgBox(prop.Name & " - " & prop.PropertyType.ToString())
+        //        {
+        //            proplist.Add(prop);
+        //            if (MappingMode == PocoPropertyMappingMode.PropertyAttribute)
+        //            {
+        //                BasicDAL.DbColumnAttributes pocoPropertyAttributes = Attribute.GetCustomAttribute(prop, typeof(DbColumnAttributes)) as DbColumnAttributes;
+        //                PocoDbColumnName.Add(prop.Name, pocoPropertyAttributes.Name);
+        //            }
+        //        }
+        //        object safevalue = null;
+        //        Type propType;
+        //        var obj = new T();
+        //        foreach (DataRow row in DataTable.AsEnumerable())
+        //        {
+
+
+        //            obj = new T();
+        //            foreach (PropertyInfo prop in proplist)
+        //            {
+        //                try
+        //                {
+        //                    propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+        //                    safevalue = null;
+        //                    string propName = "";
+        //                    if (MappingMode == PocoPropertyMappingMode.PropertyAttribute)
+        //                    {
+        //                        propName = PocoDbColumnName[prop.Name];
+        //                    }
+        //                    else
+        //                    {
+        //                        propName = prop.Name;
+        //                    }
+        //                    if (row[propName] is DBNull == false)
+        //                    {
+        //                        safevalue = row[propName] is null ? null : Convert.ChangeType(row[propName], propType);
+        //                    }
+
+        //                    prop.SetValue(obj, safevalue, null);
+        //                }
+        //                catch (Exception x)
+        //                {
+        //                    continue;
+        //                }
+        //            }
+
+        //            list.Add(obj);
+        //        }
+
+        //        return list;
+        //    }
+        //    catch
+        //    {
+        //        return null;
+        //    }
+        //}
+
+
+        private DataColumn[] GetDataTablePrimaryKeys()
+        {
+            return this.GetDataTablePrimaryKeys(this.objDataTable);
+        }
+        private DataColumn[] GetDataTablePrimaryKeys(DataTable dt )
+        {
+            BasicDAL.DbColumns PKeyColumns = this.GetPrimaryKeyDbColumns();
+            var DataTablePKeys = new DataColumn[PKeyColumns.Count()];
+                       
+            for (int i = 0; i < PKeyColumns.Count(); i++)
+            {
+                DataTablePKeys[i] = dt.Columns[PKeyColumns[i].DbColumnNameE];
+            }
+            return DataTablePKeys;
+        }
+
+        public bool FromList<T>(List<T> List, PocoPropertyMappingMode MappingMode = PocoPropertyMappingMode.PropertyName) where T : class, new()
+        {
+
+            ResetError();
+
+            
             if (List is null == true)
             {
                 return false;
             }
+           
             // Obtains the properties definition of the generic class.
             // With this, we are going to know the property names of the class
             var _TypeT = typeof(T);
             var defaultInstance = Activator.CreateInstance(_TypeT);
-            var pi = _TypeT.GetProperties();
-            var fi = _TypeT.GetFields();
-            DataRow row;
-            GetEmptyDataTable();
-            this.objDataTable.Rows.Clear(); 
-            
-            object columnvalue = null;
-            foreach (var myclass in List)
+            var pi_TypeT = _TypeT.GetProperties();
+            var fi_TypeT = _TypeT.GetFields();
+
+            var PocoDbColumnName = new Dictionary<string, string>();
+
+            foreach (PropertyInfo prop in pi_TypeT)
             {
-                row = objDataTable.NewRow();
-                foreach (PropertyInfo prop in pi)
+                if (MappingMode == PocoPropertyMappingMode.PropertyAttribute)
+                {
+                    BasicDAL.DbColumnAttributes pocoPropertyAttributes = Attribute.GetCustomAttribute(prop, typeof(DbColumnAttributes)) as DbColumnAttributes;
+                    PocoDbColumnName.Add(prop.Name, pocoPropertyAttributes.Name);
+                }
+            }
+
+            DataRow row;
+            DataTable NewDataTable = new DataTable();
+            GetEmptyDataTable(ref NewDataTable );
+       
+
+            
+            BasicDAL.DbColumns PKeyColumns = this.GetPrimaryKeyDbColumns();
+            var DataTablePKeys = GetDataTablePrimaryKeys(this.objDataTable);
+            var NewDataTablePKeys = GetDataTablePrimaryKeys(NewDataTable);
+            NewDataTable.PrimaryKey = NewDataTablePKeys;
+            //this.objDataTable.Rows.Clear();
+            this.objDataTable.PrimaryKey = DataTablePKeys;
+
+            object columnvalue = null;
+            mCurrentPosition = 0;
+
+            foreach (var listItem in List)
+            {
+                row = NewDataTable.NewRow();
+                foreach (PropertyInfo prop in pi_TypeT)
                 {
                     try
                     {
-                        // Get the value of the row according to the field name
-                        // Remember that the classïs members and the tableïs field names
-                        // must be identical
-                        columnvalue = Interaction.CallByName(myclass, prop.Name, CallType.Get);
+                        string propName = prop.Name;
+                        if (MappingMode== PocoPropertyMappingMode.PropertyAttribute )
+                        {
+                            propName = PocoDbColumnName[prop.Name];
+                        }
+                        
+                        columnvalue = Interaction.CallByName(listItem, propName, CallType.Get);
                         // Know check if the value is null. 
                         // If not, it will be added to the instance
                         if (!ReferenceEquals(columnvalue, DBNull.Value))
                         {
-                            row[prop.Name] = columnvalue;
+                            if (row.Table.Columns.Contains(propName ))
+                                row[propName] = columnvalue;
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        //ex = ex;
                     }
                 }
 
-                foreach (FieldInfo prop in fi)
+                foreach (FieldInfo prop in fi_TypeT)
                 {
                     try
                     {
                         // Get the value of the row according to the field name
                         // Remember that the classïs members and the tableïs field names
                         // must be identical
-
-                        columnvalue = Interaction.CallByName(myclass, prop.Name, CallType.Get);
+                        string propName = prop.Name;
+                        if (MappingMode == PocoPropertyMappingMode.PropertyAttribute)
+                        {
+                            propName = PocoDbColumnName[prop.Name];
+                        }
+                        columnvalue = Interaction.CallByName(listItem, propName, CallType.Get);
                         //columnvalue = Utilities.CallByName(myclass, prop.Name, Utilities.CallType.Get);
 
                         // Know check if the value is null. 
@@ -5518,7 +5751,9 @@ namespace BasicDAL
                         {
                             if (!ReferenceEquals(columnvalue, DBNull.Value))
                             {
-                                row[prop.Name] = columnvalue;
+                                if (row.Table.Columns.Contains(propName))
+                                    row[propName] = columnvalue;
+                               
                             }
                         }
                     }
@@ -5527,19 +5762,143 @@ namespace BasicDAL
                     }
                 }
 
-                objDataTable.Rows.Add(row);
+
+                try
+                {
+                    NewDataTable.Rows.Add(row);
+                }
+                catch (Exception ex)
+                {
+                    HandleExceptions(ex, "FromList<T>.NewDataTable.Rows.Add(row)");
+                    throw;
+                }
+               
+                
+                mCurrentPosition ++;
             }
 
-            this.objDataTable.AcceptChanges();
+            NewDataTable.AcceptChanges();
+
+            bool ok = false;
+            try
+            {
+
+                DataTable MergedDataTable = this.objDataTable ;
+                MergeDataTable(ref MergedDataTable, NewDataTable);
+                this.objDataTable = MergedDataTable;
+                //this.objDataTable = NewDataTable;
+                ok = true;
+            }
+            catch (Exception ex)
+            {
+                ok = false;
+                HandleExceptions(ex,"FromList<T>");
+            }
+            
+
             mRowCount = this.objDataTable.Rows.Count;
             mCurrentPosition = 0;
             mBOF = false;
-            DataRowGetValues(this.objDataTable .Rows [0], mDataBinding);
-            //MoveFirst();
-            return true;
+            
+            DataRowGetValues(this.objDataTable.Rows[0], mDataBinding);
+            MoveFirst();
+            return ok;
         }
 
-        public bool FromObject<T>(T _T) where T : class, new()
+        public void MergeDataTable(ref DataTable DTTarget, DataTable DTSource)
+        {
+            var PKeyValues = new object[DTSource.PrimaryKey.Count()];
+            var PKeyOValues = new object[DTSource.PrimaryKey.Count()];
+            int Pkeys = DTSource.PrimaryKey.Count();
+
+
+            // logica
+            // 1 - Le PK di DTTarget che non esistono in DTSource vanno eliminate in DTTarget
+            // 3 - Le PK di DTSource che non esistono in DTTarget vanno aggiunte in DTTarget
+            // 2 - Le PK che esistono sia in DTTarget che in DTSource prendono in DTTarget il valore di D2 se ci sono colonne non PK con valori differenti.
+
+
+
+
+            // FASE 1 Le PK di DTTarget che non esistono in DTSource vanno eliminate in D1
+            foreach (DataRow row in DTTarget.Rows)
+            {
+                for (int i = 0; i < Pkeys; i++)
+                {
+                    PKeyValues[i] = (object)row[DTTarget.PrimaryKey[i].ColumnName];
+                    //PKeyOValues[i] = (object)row[D1.PrimaryKey[i].ColumnName, DataRowVersion.Original];
+                }
+
+                DataRow _row = DTSource.Rows.Find(PKeyValues);
+                if (_row == null)
+                {
+                    row.Delete();
+                }
+            }
+
+
+            // 2 - Le PK che esistono sia in DTTarget che in DTSource prendono in DTTarget il valore di DTSource se ci sono colonne non PK con valori differenti.
+
+            foreach (DataRow row in DTSource.Rows)
+            {
+                for (int i = 0; i < Pkeys; i++)
+                {
+                    PKeyValues[i] = (object)row[DTSource.PrimaryKey[i].ColumnName];
+                }
+
+                DataRow _row = DTTarget.Rows.Find(PKeyValues);
+                if (_row != null)
+                {
+                    foreach (DataColumn col in DTSource.Columns)
+                    {
+                        if (_row[col.ColumnName].ToString () != row[col.ColumnName].ToString())
+                        {
+                            _row[col.ColumnName] = row[col.ColumnName];
+
+                        }
+                    }
+                }
+            }
+
+
+            // FASE 3 Le PK di DTSource che non esistono in D1 vanno aggiunte in D1
+            foreach (DataRow row in DTSource.Rows)
+            {
+                for (int i = 0; i < Pkeys; i++)
+                {
+                    PKeyValues[i] = (object)row[DTSource.PrimaryKey[i].ColumnName];
+                  
+                }
+
+                DataRow _row = DTTarget.Rows.Find(PKeyValues);
+                if (_row == null)
+                {
+                    DataRow nrow= DTTarget.NewRow();
+                    foreach (DataColumn  col in DTTarget.Columns)
+                    {
+                        //nrow[col.ColumnName] = DBNull.Value  ;// row[col.ColumnName]
+                        nrow[col.ColumnName] = row[col.ColumnName];
+                    }
+                    DTTarget.Rows .Add(nrow);
+                }
+            }
+            //D1.AcceptChanges();
+
+        }
+        public bool TruncateTable()
+        {
+            if (this.DbObjectType != DbObjectTypeEnum.Table)
+                return false;
+
+            //string SQL = "TRUNCATE TABLE " + this.mDbTableName+";";
+
+            string SQL = "DELETE " + this.mDbTableName + ";";
+            int x= this.ExecuteNonQuery (SQL);
+            return true;
+
+
+        }
+        public bool FromObject<T>(T _T, bool AsNewRow = false) where T : class, new()
         {
             ExecutionResult.Reset();
             ExecutionResult.Context = "DbObject:FromObject";
@@ -5548,9 +5907,19 @@ namespace BasicDAL
                 var proplist = new List<PropertyInfo>();
                 foreach (PropertyInfo prop in _T.GetType().GetProperties())
                     proplist.Add(prop);
-                UnloadAll();
-                var row = objDataTable.NewRow();
-                // Dim obj As New T()
+
+                DataRow row;
+                if (AsNewRow == true)
+                {
+                    //UnloadAll();
+                    row = objDataTable.NewRow();
+                }
+                else
+                {
+                    row = this.CurrentDataRow;
+                }
+
+
                 Type propType;
                 object safevalue;
                 foreach (PropertyInfo prop in proplist)
@@ -5608,7 +5977,9 @@ namespace BasicDAL
                         object safevalue = null;
                         if (row[prop.Name] is DBNull == false)
                         {
-                            safevalue = row[prop.Name] is null ? null : Convert.ChangeType(row[prop.Name], (TypeCode)propType);
+                            //safevalue = row[prop.Name] is null ? null : Convert.ChangeType(row[prop.Name], (TypeCode)propType);
+                            safevalue = row[prop.Name]; //is null ? null : Convert.ChangeType(row[prop.Name], (TypeCode)propType);
+
                         }
                         prop.SetValue(_T, safevalue, null);
                     }
@@ -5626,6 +5997,8 @@ namespace BasicDAL
                 return null;
             }
         }
+    
+
 
         public DateTime NullDateValue
         {
@@ -5745,7 +6118,7 @@ namespace BasicDAL
                 {
 
                     case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                         this.objCommand.CommandText = "ALTER SESSION SET NLS_COMP=LINGUISTIC";
                         this.objCommand.CommandType = CommandType.Text;
                         this.objCommand.ExecuteNonQuery();
@@ -5758,7 +6131,7 @@ namespace BasicDAL
                             this.objCommand.CommandText = "ALTER SESSION SET NLS_SORT=BINARY";
                         }
                         this.objCommand.ExecuteNonQuery();
-#endif 
+ 
                         break;
 
                     default:
@@ -6453,14 +6826,22 @@ namespace BasicDAL
             System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
                 {
                     DbColumn _dbColumn = mDbColumns.get_Item(_iColumn);
-                    if (_dbColumn.DataChanged)
+
+                    //lock (objDataTable)
                     {
-                        try
+                        if (_dbColumn.DataChanged)
                         {
-                            objDataTable.Rows[mCurrentPosition][_dbColumn.DbColumnNameE] = _dbColumn.Value;
-                        }
-                        catch
-                        {
+                            try
+                            {
+                                //lock (objDataTable)
+                                {
+
+                                    objDataTable.Rows[mCurrentPosition][_dbColumn.DbColumnNameE] = _dbColumn.Value;
+                                }
+                            }
+                            catch
+                            {
+                            }
                         }
                     }
                 });
@@ -6484,44 +6865,34 @@ namespace BasicDAL
         {
             if (objDataTable is null)
                 return;
-
-            // Dim dbColumn As BasicDAL.DbColumn
-            // Dim Control As BasicDAL.BoundControl
-            // If Me.objDataTable Is Nothing Then Exit Sub
-
-            // For Each dbColumn In mDbColumns
-            // For Each Control In dbColumn.BoundControls
-            // Select Case Control.BindingBehaviour
-            // Case Is = BasicDAL.BindingBehaviour.ReadWrite, BasicDAL.BindingBehaviour.ReadWriteAddNew
-
-            // Try
-            // CallByName(Control.Control, Control.PropertyName, CallType.Set, dbColumn.Value)
-            // Catch ex As Exception
-
-            // End Try
-            // End Select
-            // Next
-            // Next
-
+                        
             System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
                 {
                     DbColumn _dbColumn = mDbColumns.get_Item(_iColumn); //(DbColumn)mDbColumns.ElementAtOrDefault(_iColumn);
-                    foreach (BoundControl _Control in _dbColumn.BoundControls)
+                    //lock (_dbColumn)
                     {
-                        switch (_Control.BindingBehaviour)
+                        foreach (BoundControl _Control in _dbColumn.BoundControls)
                         {
-                            case BasicDAL.BindingBehaviour.ReadWrite or BasicDAL.BindingBehaviour.ReadWriteAddNew or BasicDAL.BindingBehaviour.AddNew:
-                                {
-                                    try
+                            switch (_Control.BindingBehaviour)
+                            {
+                                case BasicDAL.BindingBehaviour.ReadWrite:
+                                case BasicDAL.BindingBehaviour.ReadWriteAddNew:
+                                case BasicDAL.BindingBehaviour.AddNew:
                                     {
-                                        Interaction.CallByName(_Control.Control, _Control.PropertyName, CallType.Set, _dbColumn.Value);
-                                    }
-                                    catch
-                                    {
-                                    }
+                                        try
+                                        {
+                                            //lock (_Control.Control)
+                                            {
+                                                Interaction.CallByName(_Control.Control, _Control.PropertyName, CallType.Set, _dbColumn.Value);
+                                            }
+                                        }
+                                        catch
+                                        {
+                                        }
 
-                                    break;
-                                }
+                                        break;
+                                    }
+                            }
                         }
                     }
                 });
@@ -6569,7 +6940,8 @@ namespace BasicDAL
                     BoundControl = currentBoundControl;
                     switch (BoundControl.BindingBehaviour)
                     {
-                        case BasicDAL.BindingBehaviour.ReadWrite or BasicDAL.BindingBehaviour.ReadWriteAddNew:
+                        case BasicDAL.BindingBehaviour.ReadWrite: 
+                        case BasicDAL.BindingBehaviour.ReadWriteAddNew:
                             {
                                 value = Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Get);
                                 value = Utilities.DbValueCast(value, dbcolumn.DbType);
@@ -6580,9 +6952,7 @@ namespace BasicDAL
                                     case DbType.String:
                                     case DbType.StringFixedLength:
                                         {
-                                            //If(dbcolumn.OriginalValue.trim <> value.trim) Or(mAddNewStatus = True) Then
-                                            //if (Conversions.ToBoolean(Operators.OrObject(Operators.ConditionalCompareObjectNotEqual(dbcolumn.OriginalValue.ToString ().Trim(), value.ToString ().Trim(), false), mAddNewStatus == true)))
-
+                        
                                             if (dbcolumn.OriginalValue.ToString().Trim() != value.ToString().Trim() || mAddNewStatus == true)
                                             {
                                                 i = i + 1;
@@ -6593,7 +6963,6 @@ namespace BasicDAL
 
                                     default:
                                         {
-                                            //if (Conversions.ToBoolean(Operators.OrObject(Operators.ConditionalCompareObjectNotEqual(dbcolumn.OriginalValue, value, false), mAddNewStatus == true)))
                                             if (dbcolumn.OriginalValue.ToString().Trim() != value.ToString().Trim() || mAddNewStatus == true)
                                             {
                                                 i = i + 1;
@@ -6619,15 +6988,14 @@ namespace BasicDAL
                         BoundControl = currentBoundControl1;
                         switch (BoundControl.BindingBehaviour)
                         {
-                            case BasicDAL.BindingBehaviour.ReadWrite or BasicDAL.BindingBehaviour.ReadWriteAddNew:
+                            case BasicDAL.BindingBehaviour.ReadWrite:
+                            case BasicDAL.BindingBehaviour.ReadWriteAddNew:
                                 {
                                     value = Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Get);
                                     value = Utilities.DbValueCast(value, dbcolumn.DbType, NullDateValue, dbcolumn.DateTimeResolution);
 
-                                    // Parameter = Me.DbParameterNamePrefix & "p" + Trim(i)
                                     Parameter = mDbConfig.ParameterNamePrefixE + i.ToString().Trim();
 
-                                    // SQLWhere = SQLWhere & dbcolumn.DBColumnName & "=" & DbParameterNamePrefix & "p" & i & " AND "
                                     SQLWhere = SQLWhere + dbcolumn.DbColumnName + "=" + Parameter + " AND ";
                                     int parindex = lobjcommand.Parameters.Add(Parameter);
                                     lobjcommand.Parameters[parindex].Value = value;
@@ -6786,6 +7154,7 @@ namespace BasicDAL
             object value;
             string sqlCount = "SELECT COUNT(" + DbColumn.DbColumnName + ") as ROWS FROM " + DbObject.DbTableName;
             sql = "SELECT MAX(" + DbColumn.DbColumnName + ") AS retunvalue from " + DbObject.DbTableName;
+            
             value = DbObject.ExecuteScalar(sql, CommandType.Text, ConnectionState.KeepOpen);
             return Utilities.DbValueCast(value, DbColumn.DbType, NullDateValue, DbColumn.DateTimeResolution);
         }
@@ -7069,14 +7438,14 @@ namespace BasicDAL
                     switch (mDbConfig.Provider)
                     {
                         case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                             f.Add(dbpk, ComparisionOperator.IsNull, DBNull.Value, LogicOperator.AND);
-#endif
+
                             break;
 
                         default:
                             {
-                                f.Add(dbpk, ComparisionOperator.Equals, DBNull.Value, LogicOperator.AND);
+                                f.Add(dbpk, ComparisionOperator.Equal, DBNull.Value, LogicOperator.AND);
                                 break;
                             }
                     }
@@ -7177,13 +7546,77 @@ namespace BasicDAL
                                 {
                                     objDataTable = objDataSet.Tables[0];
                                     mRowCount = objDataSet.Tables[0].Rows.Count;
+                                    
+
+                                    //if (this.MappingEntity != null && this.mInterfaceMode == InterfaceModeEnum.MappingEntityPropertiesAttribute  )
+                                    //{
+                                    //    //object _mList = Activator.CreateInstance(this.mList.GetType());
+                                    //    //Type _EntityInstanceType = ListOfWhat(_mList);
+
+                                    //    //var IListRef = typeof(List<>);
+
+                                    //    var _EntityInstanceType = this.MappingEntity.GetType();//.GetProperty("Entity").PropertyType;
+                                    //    var _EntityInstance= Activator.CreateInstance(_EntityInstanceType);
+
+                                    //    //Type[] IListParam = {_EntityInstanceType };
+                                    //    //this.mList = Activator.CreateInstance(IListRef.MakeGenericType(IListParam));
+                                     
+                                    //    //var proplist = new List<PropertyInfo>();
+                                        
+
+                                    //    //foreach (PropertyInfo prop in _EntityInstanceType.GetProperties())
+                                    //    //// MsgBox(prop.Name & " - " & prop.PropertyType.ToString())
+                                    //    //{
+                                    //    //    proplist.Add(prop);
+                                    //    //}
+                                    //    foreach (DataRow row in DataTable.AsEnumerable())
+                                    //    {
+                                    //        obj = Activator.CreateInstance(_EntityInstanceType);
+                                    //        object safevalue = null;
+                                    //        Type propType;
+                                    //        foreach (PropertyInfo  prop in this.MappingEntityDbColumnsName.Values  )
+                                    //        {
+                                    //            try
+                                    //            {
+                                    //                propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+                                    //                safevalue = null;
+                                    //                string propName = prop.Name;
+                                    //                if (row[propName] is DBNull == false)
+                                    //                {
+                                    //                    safevalue = row[propName] is null ? null : Convert.ChangeType(row[propName], propType);
+                                    //                }
+
+                                    //                prop.SetValue(obj, safevalue, null);
+                                    //            }
+                                    //            catch (Exception ex)
+                                    //            {
+
+                                    //                throw;
+                                    //            }
+                                    //        }
+                                    //        //this.mList.GetType().GetMethod("Add").Invoke(this.mList, new[] { obj });
+
+                                           
+                                    //    }
+
+
+                                        //this.mList = _mList;
+                                        //if (this.MappingList != null)
+                                        //{
+
+                                        //    this.MappingList = Convert.ChangeType(_mList,this.MappingList.GetType());
+                                      
+                                        //}
+
+
+                                    //}
                                     MoveFirst();
                                 }
                             }
                             catch (Exception ex)
                             {
                                 // If (mRowCount) Then
-                                this.HandleExceptions(ex, "LoadAll");
+                                this.HandleExceptions(ex, "DoQuery");
                                 // End If
 
                             }
@@ -7239,6 +7672,81 @@ namespace BasicDAL
             }
         }
 
+
+        public void SetMappingEntityValues()
+        {
+            if (this.MappingEntity == null)
+            {
+                var _EntityInstanceType = this.MappingEntity.GetType();
+                this.MappingEntity  = Activator.CreateInstance(_EntityInstanceType);
+
+            }
+                object safevalue = null;
+                Type propType;
+                foreach (PropertyInfo prop in this.MappingEntityDbColumnsName.Values)
+                {
+                    try
+                    {
+                        propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+                        safevalue = null;
+                        string propName = prop.Name;
+                        if (this.CurrentDataRow[propName] is DBNull == false)
+                        {
+                            safevalue = CurrentDataRow[propName] is null ? null : Convert.ChangeType(CurrentDataRow[propName], propType);
+                        }
+
+                        prop.SetValue(this.MappingEntity , safevalue, null);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw ex;
+                    }
+                }
+         
+
+        }
+
+
+        public void GetMappingEntityValues()
+        {
+            if (this.MappingEntity == null)
+            {
+                var _EntityInstanceType = this.MappingEntity.GetType();
+                this.MappingEntity = Activator.CreateInstance(_EntityInstanceType);
+
+            }
+
+                Type propType;
+                object safevalue;
+                foreach (PropertyInfo prop in this.MappingEntity .GetType().GetProperties())
+                {
+                    try
+                    {
+                        propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+                        safevalue = null;
+                        safevalue = prop.GetValue(this.MappingEntity , null);
+                        CurrentDataRow[prop.Name] = safevalue;
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                }
+            
+
+        }
+
+
+        private static Type ListOfWhat(Object list)
+        {
+            return ListOfWhat2((dynamic)list);
+        }
+
+        private static Type ListOfWhat2<T>(IList<T> list)
+        {
+            return typeof(T);
+        }
+
         private void DataRowGetValuesFromDataReader()
         {
             try
@@ -7269,13 +7777,15 @@ namespace BasicDAL
             string CommandText;
             string WhereConditions;
             ResetError();
-            CommandText = "SELECT * FROM " + DbTableName;
+            //CommandText = "SELECT * FROM " + DbTableName;
+            CommandText = "SELECT " + FieldsList + " FROM " + DbTableName;
+
             WhereConditions = " 0<>0 ";
             CommandText = CommandText + " WHERE " + WhereConditions;
             ds = ExecuteDataSet(CommandText);
             mRowCount = 0;
             objDataTable = ds.Tables[0];
-            objDataTable.Rows.Add(null, null);
+            //objDataTable.Rows.Add(null, null);
         }
 
         public void GetEmptyDataTable(ref DataTable dt )
@@ -7284,13 +7794,15 @@ namespace BasicDAL
             string CommandText;
             string WhereConditions;
             ResetError();
-            CommandText = "SELECT * FROM " + DbTableName;
+            //CommandText = "SELECT * FROM " + DbTableName;
+            CommandText = "SELECT " + FieldsList + " FROM " + DbTableName;
+
             WhereConditions = " 0<>0 ";
             CommandText = CommandText + " WHERE " + WhereConditions;
             ds = ExecuteDataSet(CommandText);
             mRowCount = 0;
             dt = ds.Tables[0];
-            dt.Rows.Add(null, null);
+            //dt.Rows.Add(null, null);
         }
 
         public string GetSQLSelectCommandTextForObjectSchema()
@@ -7298,7 +7810,8 @@ namespace BasicDAL
             string CommandText = "";
             switch (DbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.View:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.View:
                     {
                         switch (mDbConfig.Provider)
                         {
@@ -7310,12 +7823,12 @@ namespace BasicDAL
 
                             case Providers.OracleDataAccess:
                                 {
-#if COMPILEORACLE
                                     CommandText = "SELECT  * FROM " + DbTableName + " WHERE ROWNUM < 1";
-#endif
                                     break;
                                 }
-                            case Providers.ODBC_DB2 or Providers.OleDb_DB2 or Providers.DB2_iSeries:
+                            case Providers.ODBC_DB2:
+                            case Providers.OleDb_DB2:
+                            case Providers.DB2_iSeries:
                                 {
                                     CommandText = "SELECT * FROM " + DbTableName + " FETCH FIRST 1 ROWS ONLY ";
                                     break;
@@ -7328,7 +7841,7 @@ namespace BasicDAL
                                 }
                             default:
                                 {
-                                    CommandText = "SELECT * FROM " + DbTableName + " WHERE 0 <>0";
+                                    CommandText = "SELECT * FROM " + DbTableName + " WHERE 0=1";
                                     break;
                                 }
                         }
@@ -7362,7 +7875,8 @@ namespace BasicDAL
             ResetError();
             switch (DbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.View:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.View:
                     {
                         switch (mDbConfig.Provider)
                         {
@@ -7392,7 +7906,7 @@ namespace BasicDAL
 
                             default:
                                 {
-                                    CommandText = "SELECT * FROM " + DbTableName + " WHERE 0<>0";
+                                    CommandText = "SELECT * FROM " + DbTableName + " WHERE 0=1";
                                     break;
                                 }
                         }
@@ -7648,7 +8162,7 @@ namespace BasicDAL
                                 break;
                             }
                         case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                             //ColumnName(-0) ' TO UPPERCASE
                             //argReturnValue = dbcolumn.DbColumnName ;
                             //AssignValue(ref argReturnValue, r["ColumnName"]);
@@ -7741,7 +8255,7 @@ namespace BasicDAL
                             AssignValue(ref argReturnValue, r["IsIdentity"]);
                             dbcolumn.IsIdentity = Convert.ToBoolean(argReturnValue);
                             //IdentityType(-23)
-#endif 
+ 
                             break;
                         case Providers.MySQL:
                             argReturnValue = dbcolumn.AllowDBNull;
@@ -8420,21 +8934,22 @@ namespace BasicDAL
                                 sSQL2.Append(dbColumn.DbColumnName + "=" + parametername);
                                 break;
                             }
-                        case Providers.OleDb or Providers.OleDb_DB2:
+                        case Providers.OleDb:
+                        case Providers.OleDb_DB2:
                             {
                                 sSQL2.Append(dbColumn.DbColumnName + "=?");
                                 break;
                             }
 
-                        case Providers.ODBC or Providers.ODBC_DB2:
+                        case Providers.ODBC:
+                        case Providers.ODBC_DB2:
                             {
                                 sSQL2.Append(dbColumn.DbColumnName + "=?");
                                 break;
                             }
                         case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                             sSQL2.Append(dbColumn.DbColumnName + "=" + parametername);
-#endif
                             break;
 
                         case Providers.ConfigDefined:
@@ -8524,8 +9039,11 @@ namespace BasicDAL
             System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
                 {
                     DbColumn dbcolumn = mDbColumns.get_Item(_iColumn);
-                    dbcolumn.Value = DataReader[dbcolumn.DbColumnName];
-                    dbcolumn.OriginalValue = dbcolumn.Value;
+                    //lock (dbcolumn)
+                    {
+                        dbcolumn.Value = DataReader[dbcolumn.DbColumnName];
+                        dbcolumn.OriginalValue = dbcolumn.Value;
+                    }
                 });
             if (DisableEvents == false)
             {
@@ -8588,7 +9106,9 @@ namespace BasicDAL
                 return RemoveRet;
             switch (DbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.View or DbObjectTypeEnum.SQLQuery:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.View:
+                case DbObjectTypeEnum.SQLQuery:
                     {
                         break;
                     }
@@ -8651,7 +9171,9 @@ namespace BasicDAL
                 return default;
             switch (DbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.View or DbObjectTypeEnum.SQLQuery:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.View: 
+                case DbObjectTypeEnum.SQLQuery:
                     {
                         break;
                     }
@@ -8663,7 +9185,6 @@ namespace BasicDAL
             }
 
             DbCommand lobjCommand;
-            // Dim UseCachedConnection As Boolean = False
             int i = -1;
             if (mDbObjectType != DbObjectTypeEnum.Table)
                 return default;
@@ -8693,8 +9214,11 @@ namespace BasicDAL
 
                 System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
                     {
-                        DbColumn dbcolumn = mDbColumns.get_Item(_iColumn);// (DbColumn)mDbColumns.ElementAtOrDefault(_iColumn);
-                        DeleteDbColumns(ref dbcolumn, ref lobjCommand);
+                        DbColumn dbcolumn = mDbColumns.get_Item(_iColumn);
+                        //lock (dbcolumn)
+                        {
+                            DeleteDbColumns(ref dbcolumn, ref lobjCommand);
+                        }
                     });
 
                 try
@@ -8710,7 +9234,8 @@ namespace BasicDAL
                         {
                             switch (mDbConfig.Provider)
                             {
-                                case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                            case Providers.ODBC_DB2:
+                            case Providers.OleDb_DB2:
                                     {
                                         lobjCommand.Transaction = DbConfig.DbTransaction;
                                         break;
@@ -8805,6 +9330,7 @@ namespace BasicDAL
             }
             if (mDbConfig.DbConnectionKeepOpen == false)
                 DbConnection.Close();
+
             return i;
         }
 
@@ -8858,7 +9384,9 @@ namespace BasicDAL
                 return AddNewRet;
             switch (DbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.View or DbObjectTypeEnum.SQLQuery:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.View:
+                case DbObjectTypeEnum.SQLQuery:
                     {
                         break;
                     }
@@ -8880,16 +9408,24 @@ namespace BasicDAL
             if (Cancel == true)
                 return AddNewRet;
             mAddNewStatus = true;
-            if (mCurrentPosition > -1)
+
+            //lock (objDataTable)
             {
-                Row = objDataTable.NewRow();
-                objDataTable.Rows.InsertAt(Row, (int)mCurrentPosition);
+                if (mCurrentPosition > -1)
+                {
+                    //lock (objDataTable)
+                    {
+                        Row = objDataTable.NewRow();
+                        objDataTable.Rows.InsertAt(Row, (int)mCurrentPosition);
+                    }
+                }
+                else
+                {
+                    Row = objDataTable.Rows.Add();
+                    mCurrentPosition = 0;
+                }
             }
-            else
-            {
-                Row = objDataTable.Rows.Add();
-                mCurrentPosition = 0;
-            }
+          
 
             mRowCount = objDataTable.Rows.Count;
             CurrentDataRow = Row;
@@ -8919,7 +9455,7 @@ namespace BasicDAL
                 {
                     System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
                     {
-                        DbColumn _dbcolumn = mDbColumns.get_Item(_iColumn);// (DbColumn)mDbColumns.ElementAtOrDefault(_iColumn);
+                        DbColumn _dbcolumn = mDbColumns.get_Item(_iColumn);
                         AddNewLoopDbColumn(ref _dbcolumn);
                     });
                 }
@@ -8984,7 +9520,9 @@ namespace BasicDAL
 
             switch (DbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.View or DbObjectTypeEnum.SQLQuery:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.View:
+                case DbObjectTypeEnum.SQLQuery:
                     {
                         break;
                     }
@@ -9121,8 +9659,11 @@ namespace BasicDAL
                 // lobjCommand.Prepare()
                 if (DbConnection.State == System.Data.ConnectionState.Closed)
                 {
-                    DbConnection.Open();
-                }
+                    //lock (DbConnection)
+                    {
+                        DbConnection.Open();
+                    }
+                 }
 
                 //If lobjCommand.Transaction Is Nothing And Me.DbConfig.DbTransaction IsNot Nothing Then
                 if (lobjCommand.Transaction == null & DbConfig.DbTransaction != null)
@@ -9166,8 +9707,11 @@ namespace BasicDAL
 
                     default:
                         {
-                            i = lobjCommand.ExecuteNonQuery();
-                            break;
+                            //lock (lobjCommand)
+                            {
+                                i = lobjCommand.ExecuteNonQuery();
+                            }
+                                break;
                         }
                 }
 
@@ -9346,7 +9890,10 @@ namespace BasicDAL
             {
                 switch (DbColumn.DbType)
                 {
-                    case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                    case DbType.AnsiString:
+                    case DbType.AnsiStringFixedLength:
+                    case DbType.String:
+                    case DbType.StringFixedLength:
 
                         if (DbColumn.Size > 0)
                         {
@@ -9358,7 +9905,9 @@ namespace BasicDAL
                         }
                         break;
 
-                    case DbType.Date or DbType.DateTime or DbType.DateTime2:
+                    case DbType.Date:
+                    case DbType.DateTime:
+                    case DbType.DateTime2:
 
                         switch (DbColumn.DbObject.DbConfig.Provider)
                         {
@@ -9382,7 +9931,8 @@ namespace BasicDAL
                     case DbType.Time:
                         switch (mDbConfig.Provider)
                         {
-                            case Providers.ODBC_DB2 or Providers.ODBC:
+                            case Providers.ODBC_DB2:
+                            case Providers.ODBC:
                                 TimeSpan ts = DateTime.Now.TimeOfDay;
                                 bool success;
                                 success = TimeSpan.TryParse(Convert.ToString(_value), out ts);
@@ -9390,7 +9940,7 @@ namespace BasicDAL
                                 break;
 
                             case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                                 TimeSpan tsoracle = new TimeSpan();
                                 tsoracle = System.Convert.ToDateTime(_value).TimeOfDay;
                                 if ((tsoracle == new TimeSpan()) == false)
@@ -9398,7 +9948,6 @@ namespace BasicDAL
                                     var OracleInterval = new Oracle.ManagedDataAccess.Types.OracleIntervalDS(tsoracle.Days, tsoracle.Hours, tsoracle.Minutes, tsoracle.Seconds, tsoracle.Milliseconds);
                                     _value = OracleInterval.ToString();
                                 }
-#endif
                                 break;
 
                             default:
@@ -9468,7 +10017,8 @@ namespace BasicDAL
                             }
                             break;
 
-                        case Providers.OleDb_DB2 or Providers.OleDb:
+                        case Providers.OleDb_DB2:
+                        case Providers.OleDb:
 
                             System.Data.OleDb.OleDbParameter _pOleDb;
                             _pOleDb = (System.Data.OleDb .OleDbParameter)p1;
@@ -9477,7 +10027,8 @@ namespace BasicDAL
                             
                             break;
 
-                        case Providers.ODBC  or Providers.ODBC_DB2 :
+                        case Providers.ODBC:
+                        case Providers.ODBC_DB2 :
 
                             System.Data.Odbc .OdbcParameter _pOdbc;
                             _pOdbc = (System.Data.Odbc.OdbcParameter)p1;
@@ -9532,18 +10083,17 @@ namespace BasicDAL
                                 sSQL2.Append(parametername + ", ");
                                 break;
                             }
-                        case Providers.OleDb or Providers.OleDb_DB2:
+                        case Providers.OleDb:
+                        case Providers.OleDb_DB2:
                             {
-                                // QUALIFIED?
                                 sSQL2.Append("?, ");
-                                //sSQL2.Append(parametername+", ");
                                 break;
                             }
 
-                        case Providers.ODBC or Providers.ODBC_DB2:
+                        case Providers.ODBC:
+                        case Providers.ODBC_DB2:
                             {
                                 sSQL2.Append("?, ");
-                                //sSQL2.Append(parametername + ", ");
                                 break;
                             }
 
@@ -9785,13 +10335,15 @@ namespace BasicDAL
                                 s_SQL1.Append(dbcolumnname + "=" + parametername + ", ");
                                 break;
                             }
-                        case Providers.OleDb or Providers.OleDb_DB2:
+                        case Providers.OleDb:
+                        case Providers.OleDb_DB2:
                             {
                                 s_SQL1.Append(dbcolumnname + "=?, ");
                                 break;
                             }
 
-                        case Providers.ODBC or Providers.ODBC_DB2:
+                        case Providers.ODBC:
+                        case Providers.ODBC_DB2:
                             {
                                 s_SQL1.Append(dbcolumnname + "=?, ");
                                 break;
@@ -9889,13 +10441,15 @@ namespace BasicDAL
                                     s_SQL2.Append(dbcolumnname + "=" + parametername);
                                     break;
                                 }
-                            case Providers.OleDb or Providers.OleDb_DB2:
+                            case Providers.OleDb:
+                            case Providers.OleDb_DB2:
                                 {
                                     s_SQL2.Append(dbcolumnname + "=?");
                                     break;
                                 }
 
-                            case Providers.ODBC or Providers.ODBC_DB2:
+                            case Providers.ODBC:
+                            case Providers.ODBC_DB2:
                                 {
                                     s_SQL2.Append(dbcolumnname + "=?");
                                     break;
@@ -9954,13 +10508,15 @@ namespace BasicDAL
                                 break;
                             }
 
-                        case Providers.OleDb or Providers.OleDb_DB2:
+                        case Providers.OleDb:
+                        case Providers.OleDb_DB2:
                             {
                                 s_SQL2.Append(dbcolumnname + "=?");
                                 break;
                             }
 
-                        case Providers.ODBC or Providers.ODBC_DB2:
+                        case Providers.ODBC:
+                        case Providers.ODBC_DB2:
                             {
                                 s_SQL2.Append(dbcolumnname + "=?");
                                 break;
@@ -10018,22 +10574,32 @@ namespace BasicDAL
             }
 
 
-            //foreach (DbColumn DbColumn in GetDbColumns())
-            //{
-            //    if (DbColumn.DbColumnNameE.Trim().ToUpper() == Name.Trim().ToUpper())
-            //    {
-            //        return DbColumn;
-            //    }
-            //}
-            //return null;
+          
         }
 
         public DbColumn GetDbColumnByDbColumnName(string Name)
         {
             ExecutionResult.Context = "DbObject:GetDbColumnByColunName";
+           
+
             foreach (DbColumn DbColumn in GetDbColumns())
             {
                 if (DbColumn.DbColumnName.Trim().ToUpper() == Name.Trim().ToUpper())
+                {
+                    return DbColumn;
+                }
+            }
+
+            return null;
+        }
+
+        public DbColumn GetDbColumnByDbColumnPropertyName(string Name)
+        {
+            ExecutionResult.Context = "DbObject:GetDbColumnByDbColumnPropertyName";
+           
+            foreach (DbColumn DbColumn in GetDbColumns())
+            {
+                if (DbColumn.Name.Trim().ToUpper() == Name.Trim().ToUpper())
                 {
                     return DbColumn;
                 }
@@ -10060,36 +10626,81 @@ namespace BasicDAL
 
             }
 
-            //foreach (DbColumn DbColumn in GetDbColumns())
-            //{
-            //    if (DbColumn.DbColumnName.Trim().ToUpper() == Name.Trim().ToUpper())
-            //    {
-            //        return DbColumn;
-            //    }
-            //}
-            //return null;
-
         }
 
 
         public DbColumns GetDbColumns()
         {
-            if (DbColumns == null)
+
+         
+            if (mDbColumns != null)
             {
-                DbColumns = GetDbColumnsE();
+                return mDbColumns;
             }
-            return DbColumns;
+            else
+            {
+                mDbColumns = GetDbColumnsE();
+                return mDbColumns;
+            }
+
         }
 
      
+        private DbColumns GetDbColumnsEFromMappingEntity()
+        {
+            ExecutionResult.Context = "DbObject:GetDbColumnsEFromEntity";
+           
+            DbColumns _DbColumns = new DbColumns();
+            DbColumn dbColumn = null;
 
+
+            //var _TypeT = this.MappingEntity.GetType().GetProperty ("Entity").PropertyType ;
+            var _TypeT = this.MappingEntity.GetType();
+            var defaultInstance = Activator.CreateInstance(_TypeT );
+            var pi = _TypeT.GetProperties();
+            
+
+            foreach (PropertyInfo prop in pi)
+            {
+                BasicDAL.DbColumnAttributes pocoPropertyAttributes = Attribute.GetCustomAttribute(prop, typeof(DbColumnAttributes)) as DbColumnAttributes;
+
+                dbColumn = new BasicDAL.DbColumn();
+                dbColumn.Name = pocoPropertyAttributes.Name;
+                dbColumn.DbType = pocoPropertyAttributes.DbType;
+                dbColumn.FriendlyName = pocoPropertyAttributes.FriendlyName;
+                dbColumn.IsPrimaryKey = pocoPropertyAttributes.IsPrimaryKey;
+                dbColumn.DisplayFormat = pocoPropertyAttributes.Format;
+                dbColumn.DbObject = this;
+                dbColumn.DbColumnName = pocoPropertyAttributes.Name;
+                dbColumn.DbColumnNameE = pocoPropertyAttributes.Name;
+
+
+                _DbColumns.Add(dbColumn);
+                //        PocoDbColumnName.Add(prop.Name, pocoPropertyAttributes.Name);
+            }
+
+
+            return _DbColumns;
+
+        }
 
         public DbColumns GetDbColumnsE()
         {
-            ExecutionResult.Context = "DbObject:GetDbColumns";
+            ExecutionResult.Context = "DbObject:GetDbColumnsE";
             FieldInfo xfi;
             DbColumns _DbColumns = new DbColumns();
             DbColumn dbColumn = null;
+
+            if (this.mInterfaceMode == InterfaceModeEnum.MappingEntityPropertiesAttribute )
+            {
+
+                _DbColumns = GetDbColumnsEFromMappingEntity();
+
+                return _DbColumns;
+            }
+
+
+
             if (Fields == null)
             {
                 Fields = GetFields(this);
@@ -10106,7 +10717,6 @@ namespace BasicDAL
                                 xfi = GetType().GetField(Field.Name, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
                                 dbColumn = (DbColumn)xfi.GetValue(this);
                             }
-
                             break;
                         }
 
@@ -10116,7 +10726,6 @@ namespace BasicDAL
                             {
                                 dbColumn = (DbColumn)Interaction.CallByName(this, Field.Name, CallType.Get);
                             }
-
                             break;
                         }
 
@@ -10129,6 +10738,7 @@ namespace BasicDAL
                             }
                             break;
                         }
+
                 }
                 dbColumn.Name = Field.Name;
                 dbColumn.DbObject = this;
@@ -10383,7 +10993,8 @@ namespace BasicDAL
 
             switch (mDbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.SQLQuery:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.SQLQuery:
                     {
                         break;
                     }
@@ -10473,7 +11084,8 @@ namespace BasicDAL
                     {
                         switch (mDbConfig.Provider)
                         {
-                            case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                                 {
                                     lobjCommand.Transaction = DbConfig.DbTransaction;
                                     break;
@@ -10546,7 +11158,8 @@ namespace BasicDAL
                 {
                     switch (_BoundControl.BindingBehaviour)
                     {
-                        case BasicDAL.BindingBehaviour.ReadWrite or BasicDAL.BindingBehaviour.ReadWriteAddNew:
+                        case BasicDAL.BindingBehaviour.ReadWrite:
+                        case BasicDAL.BindingBehaviour.ReadWriteAddNew:
                             {
                                 //value = Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Get);
                                 value = Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Get);
@@ -10853,7 +11466,10 @@ namespace BasicDAL
                             break;
                         }
 
-                    case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                    case DbType.AnsiString:
+                    case DbType.AnsiStringFixedLength:
+                    case DbType.String:
+                    case DbType.StringFixedLength:
                         {
                             CastRet = Convert.ToString(Value);
                             break;
@@ -10871,7 +11487,9 @@ namespace BasicDAL
                             break;
                         }
 
-                    case DbType.Currency or DbType.Decimal or DbType.VarNumeric:
+                    case DbType.Currency:
+                    case DbType.Decimal: 
+                    case DbType.VarNumeric:
                         {
                             CastRet = Convert.ToDecimal(Value);
                             break;
@@ -10883,7 +11501,10 @@ namespace BasicDAL
                             break;
                         }
 
-                    case DbType.Date or DbType.DateTime or DbType.DateTime2 or DbType.Time:
+                    case DbType.Date:
+                    case DbType.DateTime:
+                    case DbType.DateTime2:
+                    case DbType.Time:
                         {
                             if (Value is null == false)
                             {
@@ -10975,7 +11596,10 @@ namespace BasicDAL
             {
                 switch (dbType)
                 {
-                    case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                    case DbType.AnsiString:
+                    case DbType.AnsiStringFixedLength:
+                    case DbType.String:
+                    case DbType.StringFixedLength:
                         {
                             cast = Type.GetType("System.String");
                             break;
@@ -10993,7 +11617,9 @@ namespace BasicDAL
                             break;
                         }
 
-                    case DbType.Currency or DbType.Decimal or DbType.VarNumeric:
+                    case DbType.Currency:
+                    case DbType.Decimal: 
+                    case DbType.VarNumeric:
                         {
                             cast = Type.GetType("System.Decimal");
                             break;
@@ -11005,7 +11631,8 @@ namespace BasicDAL
                             break;
                         }
 
-                    case DbType.Date or DbType.DateTime:
+                    case DbType.Date:
+                    case DbType.DateTime:
                         {
                             cast = Type.GetType("System.Datetime");
                             break;
@@ -11126,11 +11753,6 @@ namespace BasicDAL
         public void DisableBoundControls()
         {
             ExecutionResult.Context = "DbObject:DisableBoundControls";
-            string ControlName = "";
-            string PropertyName = "";
-            string ColumnName = "";
-            int i = 0;
-            bool CanBound = false;
             if (mDataBinding == DataBoundControlsBehaviour.NoDataBinding)
                 return;
 
@@ -11200,6 +11822,9 @@ namespace BasicDAL
         {
             ExecutionResult.Context = "DbObject:BlankDbColumns";
 
+            if (mDbColumns == null)
+                return;
+
             // PARALLELIZZABILE
 
             foreach (DbColumn dbColumn in mDbColumns)
@@ -11218,13 +11843,15 @@ namespace BasicDAL
                         CanBound = false;
                         switch (BoundControl.BindingBehaviour)
                         {
-                            case BasicDAL.BindingBehaviour.ReadWrite or BasicDAL.BindingBehaviour.Write:
+                            case BasicDAL.BindingBehaviour.ReadWrite:
+                            case BasicDAL.BindingBehaviour.Write:
                                 {
                                     CanBound = true;
                                     break;
                                 }
 
-                            case BasicDAL.BindingBehaviour.ReadWriteAddNew or BasicDAL.BindingBehaviour.WriteAddNew:
+                            case BasicDAL.BindingBehaviour.ReadWriteAddNew:
+                            case BasicDAL.BindingBehaviour.WriteAddNew:
                                 {
                                     if (BindingBehaviour == true)
                                     {
@@ -11401,7 +12028,10 @@ namespace BasicDAL
                                     }
                                     break;
 
-                                case DbType.Date or DbType.DateTime or DbType.DateTime2 or DbType.DateTimeOffset:
+                                case DbType.Date:
+                                case DbType.DateTime:
+                                case DbType.DateTime2: 
+                                case DbType.DateTimeOffset:
                                     {
 
                                         if (Utilities.IsDate(_iDbColumn.Value) == true)
@@ -11416,7 +12046,11 @@ namespace BasicDAL
                                         break;
                                     }
 
-                                case DbType.Decimal or DbType.Single or DbType.VarNumeric or DbType.Double or DbType.Currency:
+                                case DbType.Decimal:
+                                case DbType.Single:
+                                case DbType.VarNumeric:
+                                case DbType.Double: 
+                                case DbType.Currency:
                                     {
                                         object _value = Convert.ToString(_iDbColumn.Value, System.Globalization.CultureInfo.InvariantCulture);
                                         Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Set, _value);
@@ -11434,7 +12068,11 @@ namespace BasicDAL
                         {
                             switch (_iDbColumn.DbType)
                             {
-                                case DbType.Date or DbType.Time or DbType.DateTime or DbType.DateTime2 or DbType.DateTimeOffset:
+                                case DbType.Date:
+                                case DbType.Time:
+                                case DbType.DateTime:
+                                case DbType.DateTime2:
+                                case DbType.DateTimeOffset:
 
                                     {
                                         Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Set, (object)NullDateValue);
@@ -11458,7 +12096,7 @@ namespace BasicDAL
 
         private void DataRowGetDbColumnValue(ref DbColumn _iDbColumn, ref DataRow DataRow, bool IsDataRowValid)
         {
-            if (IsDataRowValid)
+            if (IsDataRowValid && DataRow.RowState!= DataRowState.Deleted)
             {
                 if (ReferenceEquals(DataRow[_iDbColumn.DbColumnNameE], DBNull.Value))
                 {
@@ -11476,6 +12114,12 @@ namespace BasicDAL
 
             _iDbColumn.OriginalValue = _iDbColumn.Value;
             _iDbColumn.DataChanged = false;
+
+            if (this.mInterfaceMode == InterfaceModeEnum.MappingEntityPropertiesAttribute && this.MappingEntity !=null )
+            {
+                this.SetMappingEntityValues();
+            }
+
         }
 
         public void UpdateBoundControls(DbColumn DBColumn)
@@ -11614,10 +12258,15 @@ namespace BasicDAL
                 objDeleteCommand.CommandTimeout = CommandTimeOut;
                 objAdapter = objFactory.CreateDataAdapter();
 
-
-
-                mDbColumns = GetDbColumns();
-
+                if (this.mInterfaceMode == InterfaceModeEnum.MappingEntityPropertiesAttribute)
+                {
+                    mDbColumns = GetDbColumns();
+                    GetMappingEntityDbColumnsName();
+                }
+                else
+                {
+                    mDbColumns = GetDbColumns();
+                }
 
                 if (mOnlyEntityInitialization == false)
                 {
@@ -12119,6 +12768,15 @@ namespace BasicDAL
             ExecutionResult.Reset();
             mLasteException = ex;
 
+            if (Information.Err().Number == 0)
+            {
+                mLastErrorCode = ex.HResult;
+            }
+            else
+            {
+                mLastErrorCode = Information.Err().Number;
+            }
+
             errmsg = errmsg + "Database Name   : " + mDbConfig.DataBaseName + vbCrLf;
             errmsg = errmsg + "Database Object : " + GetType().Name + vbCrLf;
             switch (DbObjectType)
@@ -12153,7 +12811,8 @@ namespace BasicDAL
                         break;
                     }
 
-                case DbObjectTypeEnum.TableFunction or DbObjectTypeEnum.ScalarFunction:
+                case DbObjectTypeEnum.TableFunction:
+                case DbObjectTypeEnum.ScalarFunction:
                     {
                         errmsg = errmsg + "Function     : " + mDbFunctionName + vbCrLf;
                         break;
@@ -12166,16 +12825,16 @@ namespace BasicDAL
             errmsg = errmsg + vbCrLf;
             errmsg = errmsg + "Context      : " + Context + vbCrLf;
             errmsg = errmsg + "Error Source : " + ex.Source + vbCrLf;
-            errmsg = errmsg + "Error Code   : " + Information.Err().Number + vbCrLf;
-            errmsg = errmsg + "Error Descr. : " + Information.Err().Description + vbCrLf + vbCrLf;
+            errmsg = errmsg + "Error Code   : " + mLastErrorCode + vbCrLf; // Information.Err().Number + vbCrLf;
+            //errmsg = errmsg + "Error Descr. : " + Information.Err().Description + vbCrLf + vbCrLf;
             errmsg = errmsg + "Exception    : " + ex.Message + vbCrLf + vbCrLf;
 
 
 
-            mLastError = Information.Err().Description;
+            mLastError = ex.Message; //Information.Err().Description;
            
             mLastErrorComplete = errmsg;
-            mLastErrorCode = Information.Err().Number;
+            //mLastErrorCode = Information.Err().Number;
             ErrorState = true;
             ExecutionResult.LastDllError = Information.Err().LastDllError;
             ExecutionResult.ResultCode = ExecutionResult.eResultCode.Failed;
@@ -12886,11 +13545,10 @@ namespace BasicDAL
         {
             ExecutionResult.Context = "DbObject:ExecuteStoredProcedure";
             var ds = new DataSet();
-            {
-                ref var withBlock = ref objStoredProcedureCommand;
-                withBlock.CommandText = mDbStoredProcedureName;
-                withBlock.CommandType = CommandType.StoredProcedure;
-                withBlock.Connection = DbConnection;
+            {                
+                objStoredProcedureCommand.CommandText = mDbStoredProcedureName;
+                objStoredProcedureCommand.CommandType = CommandType.StoredProcedure;
+                objStoredProcedureCommand.Connection = DbConnection;
             }
 
             objAdapter.SelectCommand = objStoredProcedureCommand;
@@ -12905,7 +13563,8 @@ namespace BasicDAL
 
                 switch (mDbConfig.Provider)
                 {
-                    case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                    case Providers.ODBC_DB2:
+                    case Providers.OleDb_DB2:
                         {
                             if (objStoredProcedureCommand.Transaction is null)
                             {
@@ -12962,18 +13621,18 @@ namespace BasicDAL
             ExecutionResult.Context = "DbObject:ExecuteTableScalarFunction";
             var ds = new DataSet();
             {
-                ref var withBlock = ref objStoredProcedureCommand;
+               
                 switch (mDbObjectType)
                 {
                     case DbObjectTypeEnum.TableFunction:
                         {
-                            withBlock.CommandText = "SELECT * FROM " + mDbFunctionName;
+                            objStoredProcedureCommand.CommandText = "SELECT * FROM " + mDbFunctionName;
                             break;
                         }
 
                     case DbObjectTypeEnum.ScalarFunction:
                         {
-                            withBlock.CommandText = "SELECT " + mDbFunctionName;
+                            objStoredProcedureCommand.CommandText = "SELECT " + mDbFunctionName;
                             break;
                         }
 
@@ -12983,8 +13642,8 @@ namespace BasicDAL
                         }
                 }
 
-                withBlock.CommandType = CommandType.Text;
-                withBlock.Connection = DbConnection;
+                objStoredProcedureCommand.CommandType = CommandType.Text;
+                objStoredProcedureCommand.Connection = DbConnection;
             }
 
             objAdapter.SelectCommand = objStoredProcedureCommand;
@@ -12998,7 +13657,8 @@ namespace BasicDAL
 
                 switch (mDbConfig.Provider)
                 {
-                    case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                    case Providers.ODBC_DB2:
+                    case Providers.OleDb_DB2:
                         {
                             if (objStoredProcedureCommand.Transaction is null)
                             {
@@ -13364,7 +14024,8 @@ namespace BasicDAL
             {
                 switch (mDbConfig.Provider)
                 {
-                    case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                    case Providers.ODBC_DB2:
+                    case Providers.OleDb_DB2:
                         {
                             query = query + " FETCH FIRST " + mTopRecords + " ROWS ONLY ";
                             break;
@@ -13392,11 +14053,11 @@ namespace BasicDAL
 
             SQLSelect = query;
             {
-                ref var withBlock = ref objDataReaderCommand;
-                withBlock.CommandText = query + AppendedSQL;
-                withBlock.CommandType = commandtype;
-                withBlock.Connection = objDataReaderConnection;
-                withBlock.CommandTimeout = CommandTimeOut;
+              
+                objDataReaderCommand.CommandText = query + AppendedSQL;
+                objDataReaderCommand.CommandType = commandtype;
+                objDataReaderCommand.Connection = objDataReaderConnection;
+                objDataReaderCommand.CommandTimeout = CommandTimeOut;
             }
 
             try
@@ -13613,7 +14274,8 @@ namespace BasicDAL
 
             switch (DbObjectType)
             {
-                case DbObjectTypeEnum.Table or DbObjectTypeEnum.View:
+                case DbObjectTypeEnum.Table:
+                case DbObjectTypeEnum.View:
                     {
                         switch (mTopRecords)
                         {
@@ -13754,8 +14416,7 @@ namespace BasicDAL
 
             }
 
-            //if (!string.IsNullOrEmpty(mOrderBy))
-            //    query = query + " ORDER BY " + mOrderBy;
+          
             if (mDbOrderBy.Count ==0)
             {
                 if (!string.IsNullOrEmpty(mOrderBy))
@@ -13771,7 +14432,8 @@ namespace BasicDAL
             {
                 switch (mDbConfig.Provider)
                 {
-                    case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                    case Providers.ODBC_DB2:
+                    case Providers.OleDb_DB2:
                         {
                             query = query + " FETCH FIRST " + mTopRecords + " ROWS ONLY ";
                             break;
@@ -13814,7 +14476,8 @@ namespace BasicDAL
 
             switch (mDbConfig.Provider)
             {
-                case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                case Providers.ODBC_DB2:
+                case Providers.OleDb_DB2:
                     {
                         if (objCommand.Transaction is null)
                         {
@@ -13999,7 +14662,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.SelectCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14020,7 +14684,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.UpdateCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14041,7 +14706,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.InsertCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14062,7 +14728,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.DeleteCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14132,7 +14799,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.SelectCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14153,7 +14821,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.UpdateCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14174,7 +14843,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.InsertCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14195,7 +14865,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.DeleteCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14279,7 +14950,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.SelectCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14300,7 +14972,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.UpdateCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14321,7 +14994,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.InsertCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14342,7 +15016,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.DeleteCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14365,7 +15040,8 @@ namespace BasicDAL
             {
                 switch (mDbConfig.Provider)
                 {
-                    case Providers.ODBC or Providers.ODBC_DB2:
+                    case Providers.ODBC:
+                    case Providers.ODBC_DB2:
                         {
                             objAdapter.UpdateBatchSize = this.BatchRows;
                             break;
@@ -14417,7 +15093,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.SelectCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14438,7 +15115,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.UpdateCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14459,7 +15137,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.InsertCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14480,7 +15159,8 @@ namespace BasicDAL
                 {
                     switch (mDbConfig.Provider)
                     {
-                        case Providers.ODBC_DB2 or Providers.OleDb_DB2:
+                        case Providers.ODBC_DB2:
+                        case Providers.OleDb_DB2:
                             {
                                 objAdapter.DeleteCommand.Transaction = DbConfig.DbTransaction;
                                 break;
@@ -14536,7 +15216,7 @@ namespace BasicDAL
                 //}
 
                 int oldCurrentPosition = (int)mCurrentPosition;
-                AffectedRecords = objAdapter.Update(this.DataTable);
+                AffectedRecords = objAdapter.Update(this.objDataTable);
                 DoQuery();
 
 
@@ -14613,20 +15293,21 @@ namespace BasicDAL
                         return new SqlCommandBuilder((SqlDataAdapter)Adapter);
                     }
 
-                case Providers.ODBC or Providers.ODBC_DB2:
+                case Providers.ODBC:
+                case Providers.ODBC_DB2:
                     {
                         return new OdbcCommandBuilder((OdbcDataAdapter)Adapter);
                     }
 
-                case Providers.OleDb or Providers.OleDb_DB2:
+                case Providers.OleDb:
+                case Providers.OleDb_DB2:
                     {
                         return new OleDbCommandBuilder((OleDbDataAdapter)Adapter);
                     }
 
                 case Providers.OracleDataAccess:
-#if COMPILEORACLE
+
                     return new Oracle.ManagedDataAccess.Client.OracleCommandBuilder((Oracle.ManagedDataAccess.Client.OracleDataAdapter)Adapter);
-#endif
 
                 case Providers.SqlServer:
                     {
@@ -14660,13 +15341,15 @@ namespace BasicDAL
                         break;
                     }
 
-                case Providers.ODBC or Providers.ODBC_DB2:
+                case Providers.ODBC:
+                case Providers.ODBC_DB2:
                     {
                         objCommandBuilder = new OdbcCommandBuilder((OdbcDataAdapter)objAdapter);
                         break;
                     }
 
-                case Providers.OleDb or Providers.OleDb_DB2:
+                case Providers.OleDb:
+                case Providers.OleDb_DB2:
                     {
                         objCommandBuilder = new OleDbCommandBuilder((OleDbDataAdapter)objAdapter);
                         break;
@@ -14674,11 +15357,11 @@ namespace BasicDAL
 
                 case Providers.OracleDataAccess:
 
-#if COMPILEORACLE
-                    this.objCommandBuilder = new Oracle.ManagedDataAccess.Client.OracleCommandBuilder((Oracle.ManagedDataAccess.Client.OracleDataAdapter)this.objAdapter);
-#endif
-                    break;
+                    {
+                        this.objCommandBuilder = new Oracle.ManagedDataAccess.Client.OracleCommandBuilder((Oracle.ManagedDataAccess.Client.OracleDataAdapter)this.objAdapter);
+                        break;
 
+                    }
                 case Providers.SqlServer:
                     {
                         objCommandBuilder = new SqlCommandBuilder((SqlDataAdapter)objAdapter);
@@ -14772,7 +15455,8 @@ namespace BasicDAL
                         break;
                     }
 
-                case InterfaceModeEnum.Public or InterfaceModeEnum.Private:
+                case InterfaceModeEnum.Public:
+                case InterfaceModeEnum.Private:
                     {
                         mFields = rGetFields(this);
                         lJoins = new Join[mFields.Length + 1];
@@ -14818,7 +15502,8 @@ namespace BasicDAL
             Field[] GetFieldsRet = default;
             ExecutionResult.Context = "DbObject:GetFields";
             int i = 0;
-            Field[] lFields = new Field[1];
+            //Field[] lFields = new Field[1];
+            Field[] lFields = {};  // new Field[1];
             int index = 0;
             DbColumn dbcolumn;
             FieldInfo xfi;
@@ -14827,6 +15512,65 @@ namespace BasicDAL
             FieldsList = "";
             switch (InterfaceMode)
             {
+
+                case InterfaceModeEnum.MappingEntityPropertiesAttribute:
+
+
+                    var _TypeT = this.MappingEntity.GetType();//.GetProperty("Entity").PropertyType;
+                    var defaultInstance = Activator.CreateInstance(_TypeT);
+                    var pi = _TypeT.GetProperties();
+                    lFields = new Field[pi.Length];
+                    foreach (PropertyInfo prop in pi)
+                    {
+                        BasicDAL.DbColumnAttributes pocoPropertyAttributes = Attribute.GetCustomAttribute(prop, typeof(DbColumnAttributes)) as DbColumnAttributes;
+
+                        dbcolumn = this.mDbColumns[pocoPropertyAttributes.Name];
+                        switch (mDbConfig.Provider)
+                        {
+                            case Providers.OracleDataAccess:
+                                dbcolumn.DbColumnName = dbcolumn.DbColumnName.ToUpper();
+                                dbcolumn.DbColumnNameAlias = dbcolumn.DbColumnNameAlias.ToUpper();
+                                dbcolumn.DbColumnNameE = dbcolumn.DbColumnNameE.ToUpper();
+                                break;
+                            default:
+                                break;
+                        }
+
+                        lFields[i].Name = dbcolumn.Name;
+                        lFields[i].Type = dbcolumn .GetType() ;
+                        lFields[i].TypeName = dbcolumn.GetType().Name.ToUpper();
+                        lFields[i].Index = index;
+                        lFields[i].DbColumnName = dbcolumn.DbColumnName;
+                        lFields[i].DbColumnNameE = dbcolumn.DbColumnNameE;
+                        lFields[i].DbColumnNameAlias = dbcolumn.DbColumnNameAlias;
+
+
+                        if (!string.IsNullOrEmpty(dbcolumn.DbColumnNameAlias))
+                        {
+                            cAlias = " as " + dbcolumn.DbColumnNameAlias;
+                        }
+                        else
+                        {
+                            cAlias = "";
+                        }
+
+
+                        if (dbcolumn.Extraction == true)
+                        {
+                            s_FieldList.Append(dbcolumn.DbColumnName + cAlias + ",");
+                        }
+                        else
+                        {
+                            // MsgBox("no")
+                        }
+
+                        i = i + 1;
+                   
+
+                    }
+
+                        break;
+
                 case InterfaceModeEnum.Property:
                     {
                         mProperties = rGetProperties(this);
@@ -14885,7 +15629,8 @@ namespace BasicDAL
                         break;
                     }
 
-                case InterfaceModeEnum.Public or InterfaceModeEnum.Private:
+                case InterfaceModeEnum.Public:
+                case InterfaceModeEnum.Private:
                     {
                         mFields = rGetFields(this);
                         lFields = new Field[mFields.Length + 1];
@@ -14904,11 +15649,7 @@ namespace BasicDAL
 
                                     xfi = GetType().GetField(mField.Name, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public | BindingFlags.Static);
                                     dbcolumn = (DbColumn)xfi.GetValue(this);
-                                    // xfi = Me.GetType().GetField(mField.Name, BindingFlags.Public)
-                                    // dbcolumn = xfi.GetValue(Me)
-
-                                    // dbcolumn = CallByName(Me, mField.Name, CallType.Get)
-                                    //dbcolumn = (DbColumn)Utilities.CallByName(this, mField.Name,Utilities.CallType.Get);
+                             
                                 }
 
                                 switch (mDbConfig.Provider)
@@ -14945,10 +15686,7 @@ namespace BasicDAL
                                 {
                                     s_FieldList.Append(dbcolumn.DbColumnName + cAlias + ",");
                                 }
-                                //else
-                                //{
-                                //   // cAlias = cAlias;
-                                //}
+                               
 
                                 i = i + 1;
                             }
@@ -14968,8 +15706,7 @@ namespace BasicDAL
             GetFieldsRet = lFields;
             FieldsList = s_FieldList.ToString();
             if (i > 0)
-                //FieldsList = Strings.Mid(FieldsList, 1, Strings.Len(FieldsList) - 1);
-                FieldsList = FieldsList.Substring(0, FieldsList.Length - 1);
+                 FieldsList = FieldsList.Substring(0, FieldsList.Length - 1);
             return GetFieldsRet;
         }
 
@@ -15011,7 +15748,8 @@ namespace BasicDAL
                         break;
                     }
 
-                case InterfaceModeEnum.Public or InterfaceModeEnum.Private:
+                case InterfaceModeEnum.Public:
+                case InterfaceModeEnum.Private:
                     {
                         mFields = rGetFields(this);
                         lParameter = new Parameter[mFields.Length];
@@ -15505,13 +16243,9 @@ namespace BasicDAL
             SqlCommand _SqlCommand = new SqlCommand();
             MySql.Data.MySqlClient.MySqlCommand _MySQLCommand= new MySql.Data.MySqlClient.MySqlCommand();
             IBM.Data.DB2.iSeries.iDB2Command _DB2iSeriesCommand = new IBM.Data.DB2.iSeries.iDB2Command();
-
-#if COMPILEORACLE
             Oracle.ManagedDataAccess.Client.OracleCommand _OracleCommand = new Oracle.ManagedDataAccess.Client.OracleCommand();
-#endif
 
             // FARE IL CAST DEL DbCommand ?
-
 
             switch (Provider)
             {
@@ -15531,9 +16265,7 @@ namespace BasicDAL
                     _OleDbCommand = (OleDbCommand)DbCommand;
                     break;
                 case Providers.OracleDataAccess:
-#if COMPILEORACLE
                     _OracleCommand = (Oracle.ManagedDataAccess.Client.OracleCommand)DbCommand;
-#endif
                     break;
                 case Providers.ODBC:
                     _OdbcCommand = (OdbcCommand)DbCommand;
@@ -15571,7 +16303,8 @@ namespace BasicDAL
                             switch (Filter.ComparisionOperator)
                             {
 
-                                case ComparisionOperator.Between or ComparisionOperator.NotBetween:
+                                case ComparisionOperator.Between:
+                                case ComparisionOperator.NotBetween:
                                     {
                                         object _b1 = null;
                                         object _b2 = null;
@@ -15597,31 +16330,26 @@ namespace BasicDAL
                                             if (Filter.UseBoundControl == false)
                                             {
 
-                                                //var xparameter1 = new object();
-                                                //var xparameter2 = new object();
-
                                                 System.Data.Common.DbParameter xparameter1;
                                                 System.Data.Common.DbParameter xparameter2;
-
-
 
                                                 switch (Provider)
                                                 {
                                                     case Providers.OracleDataAccess:
-#if COMPILEORACLE
                                                         xparameter1 = _OracleCommand.Parameters.Add(Parameter1, _b1);
                                                         xparameter2 = _OracleCommand.Parameters.Add(Parameter2, _b2);
-#endif
                                                         break;
 
-                                                    case Providers.ODBC_DB2 or Providers.ODBC:
+                                                    case Providers.ODBC_DB2:
+                                                    case Providers.ODBC:
                                                         xparameter1 = _OdbcCommand.Parameters.AddWithValue(Parameter1, _b1);
                                                         xparameter2 = _OdbcCommand.Parameters.AddWithValue(Parameter2, _b2);
                                                         SetParameter(ref xparameter1, Filter.DbColumn);
                                                         SetParameter(ref xparameter2, Filter.DbColumn);
                                                         break;
 
-                                                    case Providers.OleDb_DB2 or Providers.OleDb:
+                                                    case Providers.OleDb_DB2:
+                                                    case Providers.OleDb:
                                                         xparameter1 = _OleDbCommand.Parameters.AddWithValue(Parameter1, _b1);
                                                         xparameter2 = _OleDbCommand.Parameters.AddWithValue(Parameter2, _b2);
                                                         SetParameter(ref xparameter1, Filter.DbColumn);
@@ -15632,16 +16360,16 @@ namespace BasicDAL
                                                         xparameter1 = _SqlCommand.Parameters.AddWithValue(Parameter1, _b1);
                                                         xparameter2 = _SqlCommand.Parameters.AddWithValue(Parameter2, _b2);
                                                         break;
+                                                    
                                                     case Providers.DB2_iSeries :
                                                         xparameter1 = _DB2iSeriesCommand.Parameters.AddWithValue(Parameter1, _b1);
                                                         xparameter2 = _DB2iSeriesCommand.Parameters.AddWithValue(Parameter2, _b2);
                                                         break;
+                                                    
                                                     case Providers.MySQL :
                                                         xparameter1 = _MySQLCommand.Parameters.AddWithValue(Parameter1, _b1);
                                                         xparameter2 = _MySQLCommand.Parameters.AddWithValue(Parameter2, _b2);
                                                         break;
-
-
 
                                                     default:
                                                         break;
@@ -15650,34 +16378,32 @@ namespace BasicDAL
                                             else
                                             {
                                                 value = Interaction.CallByName(Filter.BoundControl, Filter.PropertyName, CallType.Get);
-                                                //var xparameter1 = new object();
-                                                //var xparameter2 = new object();
-
                                                 System.Data.Common.DbParameter xparameter1;
                                                 System.Data.Common.DbParameter xparameter2;
                                                 switch (Filter.DbColumn.DbObject.DbConfig.Provider)
                                                 {
 
                                                     case Providers.OracleDataAccess:
-#if COMPILEORACLE
                                                         xparameter1 = _OracleCommand.Parameters.Add(Parameter1, _b1);
                                                         xparameter2 = _OracleCommand.Parameters.Add(Parameter2, _b2);
-#endif
                                                         break;
 
-                                                    case Providers.ODBC_DB2 or Providers.ODBC:
+                                                    case Providers.ODBC_DB2:
+                                                    case Providers.ODBC:
                                                         xparameter1 = _OdbcCommand.Parameters.AddWithValue(Parameter1, value);
                                                         xparameter2 = _OdbcCommand.Parameters.AddWithValue(Parameter2, value);
                                                         SetParameter(ref xparameter1, Filter.DbColumn);
                                                         SetParameter(ref xparameter2, Filter.DbColumn);
                                                         break;
 
-                                                    case Providers.OleDb_DB2 or Providers.OleDb:
+                                                    case Providers.OleDb_DB2:
+                                                    case Providers.OleDb:
                                                         xparameter1 = _OleDbCommand.Parameters.AddWithValue(Parameter1, value);
                                                         xparameter2 = _OleDbCommand.Parameters.AddWithValue(Parameter2, value);
                                                         SetParameter(ref xparameter1, Filter.DbColumn);
                                                         SetParameter(ref xparameter2, Filter.DbColumn);
                                                         break;
+                                                    
                                                     case Providers.SqlServer:
                                                         ;
                                                         xparameter1 = _SqlCommand.Parameters.AddWithValue(Parameter1, value);
@@ -15718,13 +16444,15 @@ namespace BasicDAL
                                         break;
                                     }
 
-                                case ComparisionOperator.IsNotNull or ComparisionOperator.IsNull:
+                                case ComparisionOperator.IsNotNull:
+                                case ComparisionOperator.IsNull:
                                     {
                                         s_SQL.Append(Filter.DbColumn.DbColumnName + sComparisionOperators[(int)Filter.ComparisionOperator] + " " + sLogicsOperators[(int)Filter.LogicOperator] + " ");
                                         break;
                                     }
 
-                                case ComparisionOperator.In or ComparisionOperator.NotIn:
+                                case ComparisionOperator.In:
+                                case ComparisionOperator.NotIn:
                                     {
                                         int _i = 1;
                                         StringBuilder _IN = new StringBuilder();
@@ -15744,17 +16472,17 @@ namespace BasicDAL
                                                     switch (Provider)
                                                     {
                                                         case Providers.OracleDataAccess:
-#if COMPILEORACLE
                                                             xparameter = _OracleCommand.Parameters.Add(ParameterName, value);
-#endif
                                                             break;
 
-                                                        case Providers.ODBC or Providers.ODBC_DB2:
+                                                        case Providers.ODBC:
+                                                        case Providers.ODBC_DB2:
                                                             xparameter = _OdbcCommand.Parameters.AddWithValue(ParameterName, value);
                                                             SetParameter(ref xparameter, Filter.DbColumn);
                                                             break;
 
-                                                        case Providers.OleDb_DB2 or Providers.OleDb:
+                                                        case Providers.OleDb_DB2:
+                                                        case Providers.OleDb:
                                                             xparameter = _OleDbCommand.Parameters.AddWithValue(ParameterName, value);
                                                             SetParameter(ref xparameter, Filter.DbColumn);
                                                             break;
@@ -15770,18 +16498,7 @@ namespace BasicDAL
                                                         case Providers.MySQL:
                                                             xparameter = _MySQLCommand.Parameters.AddWithValue(ParameterName, value);
                                                             break;
-                                                        //case Providers.PostgreSQL:
-                                                        //    break;
-
-                                                        //case Providers.Sharepoint:
-                                                        //    break;
-
-                                                        //case Providers.ConfigDefined:
-                                                        //    break;
-
-                                                        //case Providers.Undefined:
-                                                        //    break;
-
+                                                        
                                                         default:
 
                                                             break;
@@ -15792,24 +16509,23 @@ namespace BasicDAL
                                                 {
                                                     //value = Utilities.CallByName(Filter.BoundControl, Filter.PropertyName, Utilities.CallType.Get);
                                                     value = Interaction.CallByName(Filter.BoundControl, Filter.PropertyName, CallType.Get);
-                                                    //var xparameter = new object();
                                                     System.Data.Common.DbParameter xparameter;
                                                     
                                                     switch (Provider)
                                                     {
 
                                                         case Providers.OracleDataAccess:
-#if COMPILEORACLE
                                                             xparameter = _OracleCommand.Parameters.Add(ParameterName, value);
-#endif
                                                             break;
 
-                                                        case Providers.ODBC_DB2 or Providers.ODBC:
+                                                        case Providers.ODBC_DB2:
+                                                        case Providers.ODBC:
                                                             xparameter = _OdbcCommand.Parameters.AddWithValue(ParameterName, value);
                                                             SetParameter(ref xparameter, Filter.DbColumn);
                                                             break;
 
-                                                        case Providers.OleDb_DB2 or Providers.OleDb:
+                                                        case Providers.OleDb_DB2:
+                                                        case Providers.OleDb:
                                                             xparameter = _OleDbCommand.Parameters.AddWithValue(ParameterName, value);
                                                             SetParameter(ref xparameter, Filter.DbColumn);
                                                             break;
@@ -15867,22 +16583,25 @@ namespace BasicDAL
                                                 switch (Provider)
                                                 {
                                                     case Providers.OracleDataAccess:
-#if COMPILEORACLE
                                                         xparameter = _OracleCommand.Parameters.Add(ParameterName, Filter.Value);
-#endif
                                                         break;
-                                                    case Providers.ODBC_DB2 or Providers.ODBC:
+
+                                                    case Providers.ODBC_DB2:
+                                                    case Providers.ODBC:
                                                         xparameter = _OdbcCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         SetParameter(ref xparameter, Filter.DbColumn);
                                                         break;
-                                                    case Providers.OleDb_DB2 or Providers.OleDb:
+                                                    
+                                                    case Providers.OleDb_DB2:
+                                                    case Providers.OleDb:
                                                         xparameter = _OleDbCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
-                                                        //xparameter = _OleDbCommand.Parameters.Add(ParameterName, Filter.Value);
                                                         SetParameter(ref xparameter, Filter.DbColumn);
                                                         break;
+                                                    
                                                     case Providers.SqlServer:
                                                         xparameter = _SqlCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         break;
+                                                    
                                                     case Providers.DB2_iSeries :
                                                         xparameter = _DB2iSeriesCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         break;
@@ -15890,6 +16609,7 @@ namespace BasicDAL
                                                     case Providers.MySQL:
                                                         xparameter = _MySQLCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         break;
+                                                    
                                                     default:
                                                         break;
                                                 }
@@ -15900,28 +16620,33 @@ namespace BasicDAL
                                                 switch (Filter.DbColumn.DbObject.DbConfig.Provider)
                                                 {
                                                     case Providers.OracleDataAccess:
-#if COMPILEORACLE
                                                         xparameter = _OracleCommand.Parameters.Add(ParameterName, Filter.Value);
-#endif
                                                         break;
 
-                                                    case Providers.ODBC_DB2 or Providers.ODBC:
+                                                    case Providers.ODBC_DB2:
+                                                    case Providers.ODBC:
                                                         xparameter = _OdbcCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         SetParameter(ref xparameter, Filter.DbColumn);
                                                         break;
-                                                    case Providers.OleDb_DB2 or Providers.OleDb:
+
+                                                    case Providers.OleDb_DB2:
+                                                    case Providers.OleDb:
                                                         xparameter = _OleDbCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         SetParameter(ref xparameter, Filter.DbColumn);
                                                         break;
+                                                    
                                                     case Providers.SqlServer:
                                                         xparameter = _SqlCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         break;
+                                                    
                                                     case Providers.DB2_iSeries:
                                                         xparameter = _DB2iSeriesCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         break;
+                                                    
                                                     case Providers.MySQL:
                                                         xparameter = _MySQLCommand.Parameters.AddWithValue(ParameterName, Filter.Value);
                                                         break;
+                                                    
                                                     default:
                                                         break;
                                                 }
@@ -15973,7 +16698,8 @@ namespace BasicDAL
                         {
                             switch (Filter.ComparisionOperator)
                             {
-                                case ComparisionOperator.Between or ComparisionOperator.NotBetween:
+                                case ComparisionOperator.Between:
+                                case ComparisionOperator.NotBetween:
                                     {
 
                                         object _b1 = null;
@@ -16018,7 +16744,8 @@ namespace BasicDAL
                                         break;
                                     }
 
-                                case ComparisionOperator.In or ComparisionOperator.NotIn:
+                                case ComparisionOperator.In:
+                                case ComparisionOperator.NotIn:
                                     {
                                         int _i = 1;
                                         string xi = "";
@@ -16052,8 +16779,6 @@ namespace BasicDAL
                                         {
                                             if (Filter.UseBoundControl == false)
                                             {
-
-
                                                 switch (Filter.DbColumn.DbObject.DbConfig.Provider)
                                                 {
 
@@ -16105,12 +16830,7 @@ namespace BasicDAL
             BuildSQLFilterRet = true;
             return BuildSQLFilterRet;
         }
-
-
-
         
-
-        //public void SetParameter(ref dynamic  Parameter, DbColumn DbColumn)
         public void SetParameter(ref System.Data.Common .DbParameter  Parameter, DbColumn DbColumn)
         {
             Parameter.DbType = DbColumn.DbType;
@@ -16757,18 +17477,18 @@ namespace BasicDAL
                     cOperator = LogicOperator.None;
                 }
 
-                F1.Add(Item.DbColumnNameRight, ComparisionOperator.Equals, Item.DbColumnNameLeft.Value, cOperator);
+                F1.Add(Item.DbColumnNameRight, ComparisionOperator.Equal, Item.DbColumnNameLeft.Value, cOperator);
                 // Threading.Thread.Sleep(0)
             }
 
             F1.get_Item(c).LogicOperator = LogicOperator.None;
             {
-                ref var withBlock = ref mDbObject;
-                withBlock.FiltersGroup.Clear();
-                withBlock.FiltersGroup.Add(F1);
-                withBlock.BlankDbColumns(withBlock.DataBinding);
-                withBlock.DoQuery();
-                withBlock.MoveFirst();
+             
+                mDbObject.FiltersGroup.Clear();
+                mDbObject.FiltersGroup.Add(F1);
+                mDbObject.BlankDbColumns(mDbObject.DataBinding);
+                mDbObject.DoQuery();
+                mDbObject.MoveFirst();
             }
         }
 
@@ -16790,19 +17510,19 @@ namespace BasicDAL
                     cOperator = LogicOperator.None;
                 }
                 // If Item.DbColumnNameLeft.Value Is DBNull.Value Then Return
-                F1.Add(Item.DbColumnNameRight, ComparisionOperator.Equals, Item.DbColumnNameLeft.Value, cOperator);
+                F1.Add(Item.DbColumnNameRight, ComparisionOperator.Equal, Item.DbColumnNameLeft.Value, cOperator);
                 // Threading.Thread.Sleep(0)
             }
 
             mDbObjectRight.BindingBehaviour = BindingBehaviour;
             F1.get_Item(c).LogicOperator = LogicOperator.None;
             {
-                ref var withBlock = ref mDbObjectRight;
-                withBlock.FiltersGroup.Clear();
-                withBlock.FiltersGroup.Add(F1);
-                withBlock.BlankDbColumns(withBlock.DataBinding);
-                withBlock.DoQuery();
-                withBlock.MoveFirst();
+              
+                mDbObjectRight.FiltersGroup.Clear();
+                mDbObjectRight.FiltersGroup.Add(F1);
+                mDbObjectRight.BlankDbColumns(mDbObjectRight.DataBinding);
+                mDbObjectRight.DoQuery();
+                mDbObjectRight.MoveFirst();
             }
         }
 
@@ -16830,12 +17550,12 @@ namespace BasicDAL
 
             F1.get_Item(c).LogicOperator = LogicOperator.None;
             {
-                ref var withBlock = ref mDbObjectLeft;
-                withBlock.FiltersGroup.Clear();
-                withBlock.FiltersGroup.Add(F1);
-                withBlock.BlankDbColumns(withBlock.DataBinding);
-                withBlock.DoQuery();
-                withBlock.MoveFirst();
+                
+                mDbObjectLeft.FiltersGroup.Clear();
+                mDbObjectLeft.FiltersGroup.Add(F1);
+                mDbObjectLeft.BlankDbColumns(mDbObjectLeft.DataBinding);
+                mDbObjectLeft.DoQuery();
+                mDbObjectLeft.MoveFirst();
             }
         }
     }
@@ -18148,6 +18868,47 @@ namespace BasicDAL
 
     public sealed class Utilities
     {
+
+       public static TValue GetPropertyAttributeValue<T, TOut, TAttribute, TValue>(
+                                                        Expression<Func<T, TOut>> propertyExpression,
+                                                        Func<TAttribute, TValue> valueSelector)
+                                 where TAttribute : Attribute
+                                {
+                                    var expression = (MemberExpression)propertyExpression.Body;
+                                    var propertyInfo = (PropertyInfo)expression.Member;
+                                    var attr = propertyInfo.GetCustomAttributes(typeof(TAttribute), true).FirstOrDefault() as TAttribute;
+                                    return attr != null ? valueSelector(attr) : default(TValue);
+                                }
+
+        private PropertyInfo[] GetPropertiesInfo(object ClassObj)
+        {
+            PropertyInfo[] fi;
+            var ty = ClassObj.GetType();
+            fi = ty.GetProperties(BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public | BindingFlags.Static);
+            return fi;
+
+
+            //proplist[0].GetCustomAttributesData();
+            //proplist[0].GetCustomAttributesData()[0].NamedArguments[0].MemberName;
+
+
+        }
+        private List<PropertyInfo> GetPropertiesInfo<T>(T _T) where T : class, new()
+        {
+            var propertieslist = new List<PropertyInfo>();
+            foreach (PropertyInfo property in _T.GetType().GetProperties())
+                propertieslist.Add(property);
+            return propertieslist;
+        }
+
+        public static void DbObjectInitializeFromSimpleClass(ref BasicDAL.DbObject dbObject)
+        {
+            {
+
+            }
+        }
+
+
         [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true)]
         private static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
         [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
@@ -18323,6 +19084,117 @@ namespace BasicDAL
             }
 
         }
+
+     
+
+        [PermissionSet(SecurityAction.Demand, Name = "FullTrust")]
+        public  class Impersonation : IDisposable
+        {
+            private readonly SafeTokenHandle _handle;
+            private readonly WindowsImpersonationContext _context;
+
+        
+            public enum LogonTypes: int
+            {
+                /// <summary>
+                ///       ''' This logon type is intended for users who will be interactively using the computer, such as a user being logged on  
+                ///       ''' by a terminal server, remote shell, or similar process.
+                ///       ''' This logon type has the additional expense of caching logon information for disconnected operations; 
+                ///       ''' therefore, it is inappropriate for some client/server applications,
+                ///       ''' such as a mail server.
+                ///       ''' </summary>
+                LOGON32_LOGON_INTERACTIVE = 2,
+
+                /// <summary>
+                ///       ''' This logon type is intended for high performance servers to authenticate plaintext passwords.
+                ///       ''' The LogonUser function does not cache credentials for this logon type.
+                ///       ''' </summary>
+                LOGON32_LOGON_NETWORK = 3,
+
+                /// <summary>
+                ///       ''' This logon type is intended for batch servers, where processes may be executing on behalf of a user without 
+                ///       ''' their direct intervention. This type is also for higher performance servers that process many plaintext
+                ///       ''' authentication attempts at a time, such as mail or Web servers. 
+                ///       ''' The LogonUser function does not cache credentials for this logon type.
+                ///       ''' </summary>
+                LOGON32_LOGON_BATCH = 4,
+
+                /// <summary>
+                ///       ''' Indicates a service-type logon. The account provided must have the service privilege enabled. 
+                ///       ''' </summary>
+                LOGON32_LOGON_SERVICE = 5,
+
+                /// <summary>
+                ///       ''' This logon type is for GINA DLLs that log on users who will be interactively using the computer. 
+                ///       ''' This logon type can generate a unique audit record that shows when the workstation was unlocked. 
+                ///       ''' </summary>
+                LOGON32_LOGON_UNLOCK = 7,
+
+                /// <summary>
+                ///       ''' This logon type preserves the name and password in the authentication package, which allows the server to make 
+                ///       ''' connections to other network servers while impersonating the client. A server can accept plaintext credentials 
+                ///       ''' from a client, call LogonUser, verify that the user can access the system across the network, and still 
+                ///       ''' communicate with other servers.
+                ///       ''' NOTE: Windows NT:  This value is not supported. 
+                ///       ''' </summary>
+                LOGON32_LOGON_NETWORK_CLEARTEXT = 8,
+
+                /// <summary>
+                ///       ''' This logon type allows the caller to clone its current token and specify new credentials for outbound connections.
+                ///       ''' The new logon session has the same local identifier but uses different credentials for other network connections. 
+                ///       ''' NOTE: This logon type is supported only by the LOGON32_PROVIDER_WINNT50 logon provider.
+                ///       ''' NOTE: Windows NT:  This value is not supported. 
+                ///       ''' </summary>
+                LOGON32_LOGON_NEW_CREDENTIALS = 9
+            }
+
+            public Impersonation(string domain, string username, string password, LogonTypes logonTypes = LogonTypes.LOGON32_LOGON_NEW_CREDENTIALS)
+            {
+                var ok = LogonUser(username, domain, password,
+                              (int) logonTypes, 0, out this._handle);
+                if (!ok)
+                {
+                    var errorCode = Marshal.GetLastWin32Error();
+                    throw new ApplicationException(string.Format("Could not impersonate the elevated user.  LogonUser returned error code {0}.", errorCode));
+                }
+
+                this._context = WindowsIdentity.Impersonate(this._handle.DangerousGetHandle());
+
+                this._context = WindowsIdentity.Impersonate(this._handle.DangerousGetHandle());
+            }
+
+
+          
+            public void Dispose()
+            {
+                this._context.Dispose();
+                this._handle.Dispose();
+            }
+
+            [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+            private static extern bool LogonUser(String lpszUsername, String lpszDomain, String lpszPassword, int dwLogonType, int dwLogonProvider, out SafeTokenHandle phToken);
+
+            public sealed class SafeTokenHandle : SafeHandleZeroOrMinusOneIsInvalid
+            {
+                private SafeTokenHandle()
+                    : base(true)
+                { }
+
+                [DllImport("kernel32.dll")]
+                [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
+                [SuppressUnmanagedCodeSecurity]
+                [return: MarshalAs(UnmanagedType.Bool)]
+                private static extern bool CloseHandle(IntPtr handle);
+
+                protected override bool ReleaseHandle()
+                {
+                    return CloseHandle(handle);
+                }
+            }
+        }
+
+
+
         public static class ProcessHelper
         {
 
@@ -18358,6 +19230,81 @@ namespace BasicDAL
                         CloseHandle(processHandle);
                     }
                 }
+            }
+
+            public static Exception KillRemoteProcessByName(string MachineName, string ProcessName, string DomainName, string UserName,string Password)
+            {
+
+              
+                var connectoptions = new ConnectionOptions();
+                connectoptions.Username = DomainName+@"\" +UserName;
+                connectoptions.Password = Password;
+
+                string ipAddress = MachineName;
+                Exception ReturnEx = null;
+                try
+                {
+                    ManagementScope scope = new ManagementScope(@"\\" + ipAddress + @"\root\cimv2", connectoptions);
+
+                    // WMI query
+                    var query = new SelectQuery("select * from Win32_process where name = '" + ProcessName + "'");
+
+                    using (var searcher = new ManagementObjectSearcher(scope, query))
+                    {
+                        foreach (ManagementObject process in searcher.Get()) // this is the fixed line
+                        {
+                            process.InvokeMethod("Terminate", null);
+                        }
+                    }
+                   
+                }
+                catch (Exception ex)
+                {
+
+                    ReturnEx = ex;
+                }
+
+                return ReturnEx;
+            }
+
+
+            public static Exception KillRemoteProcessByID(string MachineName,int ProcessID, string DomainName, string UserName, string Password)
+            {
+                Exception ReturnEx = null;
+
+                if (ProcessID == 0)
+                {
+                    return ReturnEx  ;
+                }
+                var connectoptions = new ConnectionOptions();
+                connectoptions.Username = DomainName + @"\" + UserName;
+                connectoptions.Password = Password;
+
+                string ipAddress = MachineName;
+               
+                try
+                {
+                    ManagementScope scope = new ManagementScope(@"\\" + ipAddress + @"\root\cimv2", connectoptions);
+
+                    // WMI query
+                    var query = new SelectQuery("select * from Win32_process where ProcessID = '" + ProcessID + "'");
+
+                    using (var searcher = new ManagementObjectSearcher(scope, query))
+                    {
+                        foreach (ManagementObject process in searcher.Get()) // this is the fixed line
+                        {
+                            process.InvokeMethod("Terminate", null);
+                        }
+                    }
+
+                }
+                catch (Exception ex)
+                {
+
+                    ReturnEx = ex;
+                }
+
+                return ReturnEx;
             }
 
         }
@@ -19415,15 +20362,12 @@ namespace BasicDAL
                 if (IsDBNull(_value) == false)
                 {
 
-
-                    //if (DbColumn.DbColumnNameE == "ActionOnSourceLocationInventory")
-                    //{
-                    //    int zz = 0;
-
-                    //}
                     switch (DbColumn.DbType)
                     {
-                        case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                        case DbType.AnsiString:
+                        case DbType.AnsiStringFixedLength:
+                        case DbType.String:
+                        case DbType.StringFixedLength:
                             {
                                 if (DbColumn.Size > 0)
                                 {
@@ -19447,7 +20391,6 @@ namespace BasicDAL
                                 {
                                     case Providers.OracleDataAccess:
 
-#if COMPILEORACLE
                                         TimeSpan ts = default;
                                         ts = Conversions.ToDate(DbColumn.Value).TimeOfDay;
                                         if (ts != null)
@@ -19455,7 +20398,6 @@ namespace BasicDAL
                                             var OracleInterval = new Oracle.ManagedDataAccess.Types.OracleIntervalDS(ts.Days, ts.Hours, ts.Minutes, ts.Seconds, ts.Milliseconds);
                                             _value = OracleInterval.ToString();
                                         }
-#endif
 
 
                                         break;
@@ -19489,7 +20431,10 @@ namespace BasicDAL
                 {
                     switch (dbType)
                     {
-                        case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                    case DbType.AnsiString:
+                        case DbType.AnsiStringFixedLength:
+                        case DbType.String:
+                        case DbType.StringFixedLength:
                             {
                                 CastRet = Convert.ToString(Value);
                                 break;
@@ -19507,7 +20452,9 @@ namespace BasicDAL
                                 break;
                             }
 
-                        case DbType.Currency or DbType.Decimal or DbType.VarNumeric:
+                        case DbType.Currency:
+                    case DbType.Decimal:
+                        case DbType.VarNumeric:
                             {
                                 CastRet = Convert.ToDecimal(Value);
                                 break;
@@ -19519,7 +20466,8 @@ namespace BasicDAL
                                 break;
                             }
 
-                        case DbType.Date or DbType.DateTime:
+                    case DbType.Date:
+                        case DbType.DateTime:
                             {
                                 if (Value is null == false)
                                 {
@@ -19742,7 +20690,10 @@ namespace BasicDAL
                 {
                     switch (dbType)
                     {
-                        case DbType.AnsiString or DbType.AnsiStringFixedLength or DbType.String or DbType.StringFixedLength:
+                    case DbType.AnsiString:
+                    case DbType.AnsiStringFixedLength:
+                    case DbType.String:
+                        case DbType.StringFixedLength:
                             {
                                 return Convert.ToString(Value);
 
@@ -19758,7 +20709,9 @@ namespace BasicDAL
                                 return Convert.ToBoolean(Value);
                             }
 
-                        case DbType.Currency or DbType.Decimal or DbType.VarNumeric:
+                    case DbType.Currency:
+                    case DbType.Decimal:
+                        case DbType.VarNumeric:
                             {
                                 return Convert.ToDecimal(Value);
                             }
@@ -19768,7 +20721,9 @@ namespace BasicDAL
                                 return Convert.ToSingle(Value);
                             }
 
-                        case DbType.Date or DbType.DateTime or DbType.DateTime2:
+                    case DbType.Date:
+                    case DbType.DateTime:
+                    case DbType.DateTime2:
                             {
                                 if (Value is null == false)
                                 {
@@ -20524,14 +21479,16 @@ namespace BasicDAL
         
         public string Name{ get; set; }
         public object DefaultValue { get; set; }
-        public string FriendlyName { get; set; }
-        public string Description { get; set; }
-        public string Format { get; set; }
-        
-        public System.Data.DbType DbType { get; set; }
+        public string FriendlyName { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Format { get; set; } = "";
+        public int Lenght { get; set; } = 0;
 
-        public bool IsIdentity { get; set; }
-        public object IdentitySeed { get; set; }
+        public System.Data.DbType DbType { get; set; } = DbType.String;
+
+        public bool IsIdentity { get; set; } = false;
+        public bool IsPrimaryKey { get; set; } = false;
+        public object IdentitySeed { get; set; }= null;
         public DbColumnAttributes()
         {
             //this.ColumnName = ColumnName;
@@ -20545,12 +21502,14 @@ namespace BasicDAL
         
         public string Name { get; set; }
         public string FriendlyName { get; set; }
-        
-        
+        public InterfaceModeEnum InterfaceMode { get; set; }
+        public DbObjectTypeEnum DbObjectType { get; set; }
+
         public DbObjectAttributes()
         {
-            //this.Name = Name;
-            //this.FriendlyName = FriendlyName;
+            InterfaceMode = InterfaceModeEnum.MappingEntityPropertiesAttribute;
+            DbObjectType = DbObjectTypeEnum.Table;
+            
         }
 
     }
@@ -20563,6 +21522,11 @@ namespace BasicDAL
 
     #region Enumerations
 
+    public enum PocoPropertyMappingMode
+    {
+        PropertyName=0,
+        PropertyAttribute=1
+    }
     public enum DefaultValueEvaluationMode
         {
             OnEntityCreation = 0,
@@ -20720,10 +21684,14 @@ namespace BasicDAL
         {
             Public = 0,
             Property = 1,
-            Private = 2
-        }
+            Private = 2,
+            Simple=3,
+            MappingEntityPropertiesAttribute=4
+          
 
-        public enum DbObjectTypeEnum
+    }
+
+    public enum DbObjectTypeEnum
         {
             Table = 0,
             View = 1,

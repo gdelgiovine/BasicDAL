@@ -35,6 +35,12 @@ using Newtonsoft.Json.Linq;
 using System.Management;
 using System.Security.Cryptography;
 using System.Management.Instrumentation;
+using MySqlX.XDevAPI.Relational;
+using System.Runtime.Remoting.Channels;
+using System.Globalization;
+using Org.BouncyCastle.Cms;
+using System.Diagnostics.Eventing.Reader;
+using System.Threading.Tasks;
 
 
 
@@ -76,7 +82,8 @@ namespace BasicDAL
     {
         public ExecutionResult ExecutionResult = new ExecutionResult();
         private string mServerName;
-        private DateTime mNullDateValue = DateTime.Parse("01/01/0001 00:00:00");
+        //private DateTime mNullDateValue = DateTime.Parse("01/01/0001 00:00:00");
+        private DateTime mNullDateValue = DateTime.Parse("01/01/0001");
         private string mDatabaseName;
         private int mAuthenticationMode;
         private string mUserName = "";
@@ -250,6 +257,34 @@ namespace BasicDAL
 
             return ExecutionResult;
         }
+
+
+        public bool CheckPoint()
+        {
+            
+            if (mProvider ==  Providers.SqlServer ) 
+            {
+                //string SQL = "TRUNCATE TABLE " + this.mDbTableName+";";
+
+                string SQL = "CHECKPOINT;";
+                using (SqlCommand sqlCommand = new SqlCommand())
+                {
+                    System.Data.ConnectionState  cState = this.mDbConnection.State;
+                    sqlCommand.Connection = (System.Data.SqlClient .SqlConnection)this.mDbConnection;
+                    if (cState != System.Data.ConnectionState.Open)
+                        sqlCommand.Connection.Open();
+                    sqlCommand.CommandText = SQL;
+                    int x = sqlCommand.ExecuteNonQuery();
+                    if (cState == System.Data.ConnectionState.Closed)
+                        this.mDbConnection.Close();
+                    return true;
+                }
+
+            }
+            return true;
+
+        }
+
 
         public bool LoadFromConnectionString(string UserConnectionString, Providers Provider)
         {
@@ -505,6 +540,7 @@ namespace BasicDAL
             dbconfig.RedirectErrorsNotificationTo = RedirectErrorsNotificationTo;
             dbconfig.NullDateValue = NullDateValue;
             dbconfig.DbConnectionKeepOpen = DbConnectionKeepOpen;
+            dbconfig.RuntimeUI = RuntimeUI;
             dbconfig.Init(true);
             
             return dbconfig;
@@ -2566,10 +2602,8 @@ namespace BasicDAL
             
             try
             {
-                int Index;
                 DbColumn.BoundControls.Add(BoundControl, PropertyName);
-                //Index = List.Add(DbColumn);
-                //return (DbColumn)List[Index];
+               
 
                 if (this.Contains(DbColumn) == false)
                     this.Add(DbColumn);
@@ -2586,14 +2620,8 @@ namespace BasicDAL
 
         public DbColumn xAdd(DbColumn DbColumn)
         {
-            // If DbColumn Is Nothing Then
-            // Return Nothing
-            // End If
             try
             {
-                int Index;
-                //Index = List.Add(DbColumn);
-                //return (DbColumn)List[Index];
                 if (this.Contains(DbColumn.Name )==false)
                     this.Add(DbColumn);
                 
@@ -2609,7 +2637,6 @@ namespace BasicDAL
         public DbColumn get_Item(int Index)
         {
             DbColumn ItemRet = default;
-            //ItemRet = (DbColumn)List[Index];
             ItemRet = this[Index];
             return ItemRet;
             
@@ -2617,15 +2644,14 @@ namespace BasicDAL
 
         public void set_Item(int Index, DbColumn value)
         {
-            //List[Index] = value;
-            this[Index] = value;
+          this[Index] = value;
         }
 
         public DbColumns()
         {
       
             this.Clear();
-            //List.Clear();
+           
         }
     }
     #endregion
@@ -2746,7 +2772,7 @@ namespace BasicDAL
         private object mValidationExpression = null;
         private DataTypeFamily mDataTypeFamily = DataTypeFamily.String;
         private string mValidationMessage = "Il valore di {0} non è valido";
-
+        private string mEmptyEditMaskValue = "";
 
         // Private mACL As Dictionary(Of String, DbACE) = New Dictionary(Of String, DbACE)
 
@@ -2777,6 +2803,19 @@ namespace BasicDAL
         // Me.mACL(User).AccessMask = AccessMask
         // End If
         // End Sub
+
+        public string EmptyEditMaskValue
+        {
+            get
+            {
+                return mEmptyEditMaskValue;
+            }
+
+            set
+            {
+                mEmptyEditMaskValue = value.TrimEnd();
+            }
+        }
 
 
         private DefaultValueEvaluationMode mDefaultValueEvaluationMode = DefaultValueEvaluationMode.OnEntityCreation;
@@ -3863,13 +3902,34 @@ namespace BasicDAL
             }
         }
 
+
+        public T GetValue<T>()
+        {
+            if (mValue==DBNull.Value) 
+            {
+                return default(T);
+            }
+            if (mValue is T)
+                return (T)mValue;
+
+            return default(T);
+        }
+
+        
         public object Value
         {
             get
             {
                 object ValueRet = default;
+
                 ValueRet = mValue;
-                return ValueRet;
+                //if (this.Encrypted == false)
+                //    ValueRet = mValue;
+                //else
+                //    ValueRet = this.DecryptValue (mValue.ToString ());
+
+
+                return mValue;
             }
 
             set
@@ -3888,17 +3948,29 @@ namespace BasicDAL
                                 {
                                     if (Size > 0)
                                     {
-                                        //mValue = Strings.Mid(Conversions.ToString(value), 1, Size);
                                         mValue = value.ToString().Substring(0, Size);
+                                        //if (!this.mEncrypted)
+                                        //    mValue = value.ToString().Substring(0, Size);
+                                        //else
+                                        //    mValue = EncryptValue(value.ToString().Substring(0, Size));
                                     }
                                     else
                                     {
                                         mValue = value;
+                                        //if (!this.mEncrypted)
+                                        //    mValue = value;
+                                        //else
+                                        //    mValue = EncryptValue(value.ToString ());
                                     }
                                 }
                                 else
                                 {
                                     mValue = value;
+                                    //if (!this.mEncrypted)
+                                    //    mValue = value;
+                                    //else
+                                    //    mValue = EncryptValue(value.ToString());
+                                    
                                 }
 
                                 break;
@@ -3907,6 +3979,10 @@ namespace BasicDAL
                         default:
                             {
                                 mValue = value;
+                                //if (!this.mEncrypted)
+                                //    mValue = value;
+                                //else
+                                //    mValue = EncryptValue(value.ToString());
                                 break;
                             }
                     }
@@ -3914,6 +3990,10 @@ namespace BasicDAL
                 else
                 {
                     mValue = value;
+                    //if (!this.mEncrypted)
+                    //    mValue = value;
+                    //else
+                    //    mValue = EncryptValue(value.ToString());
                 }
 
                 if (mDbObject.CurrentPosition >= 0)
@@ -3930,11 +4010,14 @@ namespace BasicDAL
                 mValidated = false;
             }
         }
+               
 
         public object get_Value(bool UpdateCurrentDataRow)
         {
             return mValue;
         }
+
+
 
         public void set_Value(bool UpdateCurrentDataRow, object value)
         {
@@ -4053,7 +4136,7 @@ namespace BasicDAL
 
         public bool Validate()
         {
-            bool Validation = true;
+            bool Validation = false;
             if (ValidationType == ValidationTypes.None)
             {
                 return true;
@@ -4151,13 +4234,14 @@ namespace BasicDAL
                     }
             }
 
-            if (Validation == true)
+            if (Validation != true)
             {
                 if (mDbObject.SuppressErrorsNotification == false)
                 {
                     if (DbObject.RedirectErrorsNotificationTo != null)
                     {
                         Interaction.CallByName(DbObject.RedirectErrorsNotificationTo, "Show", CallType.Method, mValidationMessage);
+                        
 
                     }
                     //else
@@ -4266,20 +4350,19 @@ namespace BasicDAL
             }
         }
 
-        public bool ValidateBoundControls()
+        public bool ValidateBoundControls(bool UseValidationLabelControl=false)
         {
-            bool Validation = true;
+            bool Validation = false;
             if (ValidationType == ValidationTypes.None)
             {
                 return true;
             }
 
             string errmsg = "";
-            //foreach (BoundControl _BoundControl in mBoundControls)
             foreach (BoundControl _BoundControl in mBoundControls)
             {
 
-                if (_BoundControl.BindingBehaviour != BindingBehaviour.Write & _BoundControl.ValidationLabelControl is object)
+                if (_BoundControl.BindingBehaviour != BindingBehaviour.Write) ;//& _BoundControl.ValidationLabelControl is object)
                 {
                     bool ControlAllowNull = mAllowDBNull;
                     object ControlValue = null;
@@ -4388,41 +4471,45 @@ namespace BasicDAL
                             }
                     }
 
-                    switch (mDbObject.RuntimeUI)
+
+                    if (_BoundControl.ValidationLabelControl != null)
                     {
-                        case RuntimeUI.Service:
-                            {
-                                break;
-                            }
-                        //case RuntimeUI.Wisej:
-                        case RuntimeUI.WindowsForms: 
-                        case RuntimeUI.Wisej:
-                            {
-                                if (Validation == true)
+                        switch (mDbObject.DbConfig.RuntimeUI)
+                        {
+                            case RuntimeUI.Service:
                                 {
-
-                                    Interaction.CallByName(_BoundControl, "Tag", CallType.Set, null);
-                                    Interaction.CallByName(_BoundControl, "Visible", CallType.Set, false);
-                                    //_BoundControl.ValidationLabelControl.Tag = "";
-                                    //_BoundControl.ValidationLabelControl.Visible = false;
+                                    break;
                                 }
-                                else
+                            //case RuntimeUI.Wisej:
+                            case RuntimeUI.WindowsForms:
+                            case RuntimeUI.Wisej:
                                 {
-                                    Interaction.CallByName(_BoundControl, "Tag", CallType.Set, errmsg);
-                                    Interaction.CallByName(_BoundControl, "Visible", CallType.Set, true);
-                                    Interaction.CallByName(_BoundControl, "BringToFront", CallType.Method, null);
-                                    //_BoundControl.ValidationLabelControl.Tag = errmsg;
-                                    //_BoundControl.ValidationLabelControl.Visible = true;
-                                    //_BoundControl.ValidationLabelControl.BringToFront();
+                                    if (Validation == true)
+                                    {
+
+                                        Interaction.CallByName(_BoundControl.ValidationLabelControl, "Tag", CallType.Set, null);
+                                        Interaction.CallByName(_BoundControl.ValidationLabelControl, "Visible", CallType.Set, false);
+                                        //_BoundControl.ValidationLabelControl.Tag = "";
+                                        //_BoundControl.ValidationLabelControl.Visible = false;
+                                    }
+                                    else
+                                    {
+                                        Interaction.CallByName(_BoundControl.ValidationLabelControl, "Tag", CallType.Set, errmsg);
+                                        Interaction.CallByName(_BoundControl.ValidationLabelControl, "Visible", CallType.Set, true);
+                                        Interaction.CallByName(_BoundControl.ValidationLabelControl, "BringToFront", CallType.Method, null);
+                                        //_BoundControl.ValidationLabelControl.Tag = errmsg;
+                                        //_BoundControl.ValidationLabelControl.Visible = true;
+                                        //_BoundControl.ValidationLabelControl.BringToFront();
+                                    }
+
+                                    break;
                                 }
 
-                                break;
-                            }
-
-                        case RuntimeUI.Web:
-                            {
-                                break;
-                            }
+                            case RuntimeUI.Web:
+                                {
+                                    break;
+                                }
+                        }
                     }
                 }
             }
@@ -4658,16 +4745,12 @@ namespace BasicDAL
         {
             if (ColumnName.StartsWith("[") & ColumnName.EndsWith("]"))
             {
-                //return Strings.Mid(ColumnName, 2, Strings.Len(ColumnName) - 2);
                 return ColumnName.Substring(1, ColumnName.Length - 2);
-
             }
 
             if (ColumnName.StartsWith("\"") & ColumnName.EndsWith("\""))
             {
-                //return Strings.Mid(ColumnName, 2, Strings.Len(ColumnName) - 2);
                 return ColumnName.Substring(1, ColumnName.Length - 2);
-
             }
 
             return ColumnName;
@@ -4905,6 +4988,8 @@ namespace BasicDAL
                                             //EditedValue = Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Get);
                                             EditedValue = Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Get);
                                             //EditedValue = BasicDalSharedCode.Cast(EditedValue, mDbType, DbObject.NullDateValue, mDateTimeResolution);
+                                           
+
                                             EditedValue = Utilities.DbValueCast(EditedValue, mDbType, DbObject.NullDateValue, mDateTimeResolution);
 
 
@@ -4940,14 +5025,19 @@ namespace BasicDAL
                                 {
                                     switch (mDbType)
                                     {
+                                        case DbType.Time:
+
+                                            //DBValue = Utilities.TruncateDateTime(Convert.ToDateTime(DBValue), mDateTimeResolution);
+                                            //EditedValue = Utilities.TruncateDateTime(Convert.ToDateTime(EditedValue), mDateTimeResolution);
+
+
+                                            break;
+
                                         case DbType.Date:
                                         case DbType.DateTime:
                                         case DbType.DateTime2:
-                                        case DbType.Time:
                                         case DbType.DateTimeOffset:
                                             {
-                                                //DBValue = BasicDalSharedCode.TruncateDateTime(Convert.ToDateTime (DBValue), mDateTimeResolution);
-                                                //EditedValue = BasicDalSharedCode.TruncateDateTime(Convert.ToDateTime(EditedValue), mDateTimeResolution);
                                                 DBValue = Utilities.TruncateDateTime(Convert.ToDateTime(DBValue), mDateTimeResolution);
                                                 EditedValue = Utilities.TruncateDateTime(Convert.ToDateTime(EditedValue), mDateTimeResolution);
                                                 break;
@@ -4960,12 +5050,21 @@ namespace BasicDAL
                                     }
 
                                     //if (Conversions.ToBoolean(Operators.ConditionalCompareObjectNotEqual(DBValue, EditedValue, false)))
-                                    if (DBValue.Equals(EditedValue) == false)
+                                    if (DBValue != null)
                                     {
-                                        mDataChanged = true;
-                                        BoundControl.IsEdited = true;
-                                        i = i + 1;
-                                        break;
+                                        if (mEmptyEditMaskValue != "")
+                                        {
+                                            if (EditedValue.Equals(mEmptyEditMaskValue))
+                                                EditedValue = "";
+                                        }
+
+                                        if (DBValue.Equals(EditedValue) == false)
+                                        {
+                                            mDataChanged = true;
+                                            BoundControl.IsEdited = true;
+                                            i = i + 1;
+                                            break;
+                                        }
                                     }
                                 }
 
@@ -4979,15 +5078,25 @@ namespace BasicDAL
                                     // If (DBValue Is DBNull.Value And EditedValue <> vbNull) Then
                                     switch (mDbType)
                                     {
+
+                                        case DbType.Time:
+
+                                            //DBValue = Utilities.TruncateDateTime(Convert.ToDateTime(DBValue), mDateTimeResolution);
+                                            //EditedValue = Utilities.TruncateDateTime(Convert.ToDateTime(EditedValue), mDateTimeResolution);
+
+
+                                            break;
+
                                         case DbType.Date:
                                         case DbType.DateTime:
                                         case DbType.DateTime2:
-                                        case DbType.Time:
                                         case DbType.DateTimeOffset:
                                             {
-                                                DBValue = Utilities.TruncateDateTime(Convert.ToDateTime(DBValue), mDateTimeResolution);
+                                                if (DBValue != null == false)
+                                                {
+                                                    DBValue = Utilities.TruncateDateTime(Convert.ToDateTime(DBValue), mDateTimeResolution);
+                                                }
                                                 EditedValue = Utilities.TruncateDateTime(Convert.ToDateTime(EditedValue), mDateTimeResolution);
-                                                //if (Conversions.ToBoolean(Operators.ConditionalCompareObjectEqual(EditedValue, DbObject.NullDateValue, false)))
                                                 if (EditedValue.Equals(DbObject.NullDateValue) == false)
                                                 {
                                                     EditedValue = DBNull.Value;
@@ -5001,15 +5110,23 @@ namespace BasicDAL
                                                 break;
                                             }
                                     }
+                                                 
 
-                                    //if (Conversions.ToBoolean(Operators.ConditionalCompareObjectNotEqual(DBValue.ToString(), EditedValue, false)))
-                                    if (DBValue.ToString().Equals(EditedValue) == false)
+                                    if (mEmptyEditMaskValue != "")
                                     {
-                                        mDataChanged = true;
-                                        BoundControl.IsEdited = true;
-                                        i = i + 1;
-                                        break;
+                                        if (EditedValue.Equals(mEmptyEditMaskValue))
+                                            EditedValue = "";
                                     }
+                                    if (DBValue.ToString().Equals(EditedValue) == false)
+                                        {
+                                            mDataChanged = true;
+                                            BoundControl.IsEdited = true;
+                                            i = i + 1;
+                                            break;
+                                        }
+                                    
+                                    
+
                                 }
                             }
                         }
@@ -5091,7 +5208,7 @@ namespace BasicDAL
     [Serializable()]
     public class DbOrderBy : ArrayList
     {
-        public void AddDbColumn(BasicDAL.DbColumn DbColumn, OrderBySortDirection SortDirection)
+        public void AddDbColumn(BasicDAL.DbColumn DbColumn, OrderBySortDirection SortDirection= OrderBySortDirection.Ascendig )
         {
             string Seq = " ASC ";
             switch (SortDirection)
@@ -5169,7 +5286,7 @@ namespace BasicDAL
         public int BatchRows = 100;
         public bool UpdateBatchEnabled = false;
         public ExecutionResult ExecutionResult = new ExecutionResult();
-        public RuntimeUI RuntimeUI = RuntimeUI.WindowsForms;
+        //public RuntimeUI RuntimeUI = RuntimeUI.WindowsForms;
         public dynamic ValidatorLabelControl = null;
         public bool UseParallelism = false;
         private DbFiltersGroup objFiltersGroup = new DbFiltersGroup();
@@ -5240,7 +5357,8 @@ namespace BasicDAL
         private bool mIsReadOnly = false;
         private bool mDistinctClause = false;
         private bool mOnlyEntityInitialization = true;
-        private DateTime mNullDateValue = System.DateTime.Parse("01/01/0001 12:00:00 AM");
+        //private DateTime mNullDateValue = System.DateTime.Parse("01/01/0001 12:00:00 AM");
+        private DateTime mNullDateValue = System.DateTime.Parse("01/01/0001");
         private List<DbColumn> mDbColumnsWithValidator = new List<DbColumn>();
         private DbTransaction mDbTransaction = null;
         private DbACL mACL = new DbACL();
@@ -5352,8 +5470,7 @@ namespace BasicDAL
             }
         }
 
-
-
+        
         public DbOrderBy DbOrderBy
         {
             get
@@ -5890,14 +6007,42 @@ namespace BasicDAL
             if (this.DbObjectType != DbObjectTypeEnum.Table)
                 return false;
 
-            //string SQL = "TRUNCATE TABLE " + this.mDbTableName+";";
-
-            string SQL = "DELETE " + this.mDbTableName + ";";
+            
+            string SQL = "TRUNCATE TABLE " + this.mDbTableName;
+            switch (this.mDbConfig .Provider)
+            {
+                case Providers.SqlServer:
+                    SQL = "DELETE " + this.mDbTableName;
+                    //SQL = "TRUNCATE TABLE " + this.mDbTableName + '\n' + "GO;";
+                    break;
+                case Providers.OleDb:
+                    break;
+                case Providers.OracleDataAccess:
+                    break;
+                case Providers.ODBC:
+                    break;
+                case Providers.ConfigDefined:
+                    break;
+                case Providers.ODBC_DB2:
+                    break;
+                case Providers.OleDb_DB2:
+                    break;
+                case Providers.DB2_iSeries:
+                    SQL = "TRUNCATE TABLE " + this.mDbTableName + " IMMEDIATE";
+                    break;
+                case Providers.MySQL:
+                    break;
+                default:
+                    break;
+            }
+            
             int x= this.ExecuteNonQuery (SQL);
             return true;
 
 
         }
+
+        
         public bool FromObject<T>(T _T, bool AsNewRow = false) where T : class, new()
         {
             ExecutionResult.Reset();
@@ -6499,9 +6644,7 @@ namespace BasicDAL
         {
             get
             {
-                int CurrentPositionRet = default;
-                CurrentPositionRet = (int)mCurrentPosition;
-                return CurrentPositionRet;
+                return mCurrentPosition;
             }
         }
 
@@ -7288,6 +7431,10 @@ namespace BasicDAL
 
         public void UndoChanges()
         {
+
+
+
+            
             if (mCurrentPosition < 0L)
                 return;
             bool Cancel = false;
@@ -7298,6 +7445,11 @@ namespace BasicDAL
 
             if (Cancel == true)
                 return;
+
+            if (this.DataBinding!= DataBoundControlsBehaviour.NoDataBinding )
+                this.HideValidationLabelControls(); 
+           
+            
             if (mAddNewStatus == true)
             {
                 try
@@ -7344,6 +7496,21 @@ namespace BasicDAL
             if (DisableEvents == false)
             {
                 DataEventAfter?.Invoke(DataEventType.UndoChanges);
+            }
+        }
+
+        private void HideValidationLabelControls()
+        {
+            if (this.mDataBinding == DataBoundControlsBehaviour.NoDataBinding)
+                return;
+
+            foreach (DbColumn dbColumnWithValidator in this.mDbColumnsWithValidator)
+            {
+                foreach (BoundControl _BoundControl in dbColumnWithValidator.BoundControls)
+                {
+                    if (_BoundControl.ValidationLabelControl != null)
+                        Interaction.CallByName(_BoundControl.ValidationLabelControl, "Visible", CallType.Set, false);
+                }
             }
         }
 
@@ -7410,6 +7577,7 @@ namespace BasicDAL
             {
                 objDataTable.Clear();
                 objDataTable.Dispose();
+                objDataSet.Dispose();
                 mRowCount = 0;
                 mCurrentPosition = -1;
                 CurrentDataRow = null;
@@ -7610,6 +7778,7 @@ namespace BasicDAL
 
 
                                     //}
+
                                     MoveFirst();
                                 }
                             }
@@ -8483,23 +8652,75 @@ namespace BasicDAL
             }
         }
 
-        public void ReloadAll()
+
+        public void ReloadCurrentRowFromDB()
+        {
+            if (this.mCurrentPosition == -1)
+                return;
+
+            DataRow cRow = this.CurrentDataRow;
+            DataTable dt = this.DataTable.Clone();
+            int records = 0;
+
+          
+            records =this.objAdapter.Fill(this.mCurrentPosition , 1, dt);
+            if (records == 1)
+            {
+                this.CurrentDataRow = dt.Rows[0];
+                this.DataRowGetValues(this.CurrentDataRow, mDataBinding);
+               
+            }
+        }
+
+        public void ReloadRowsFromDB()
+        {
+            int records = 0;
+            records = this.objAdapter.Fill(this.DataTable);
+            if (records >0)
+            {
+                //this.CurrentDataRow = .Rows[0];
+                this.DataRowGetValues(this.CurrentDataRow, mDataBinding);
+            }
+        }
+
+
+        public void ReloadAll(bool Reposition=false)
         {
             bool Cancel = false;
             if (DisableEvents == false)
             {
                 DataEventBefore?.Invoke(DataEventType.Query, ref Cancel);
             }
-
+            
             if (Cancel == true)
                 return;
+
+            int OldPosition=-1;
+            int OldRowCount = this.mRowCount;
+            DataRow OldCurrentDataRow = null;
+
+            if (Reposition == true)
+            {
+                OldPosition = this.mCurrentPosition;
+                OldCurrentDataRow = this.CurrentDataRow;
+            }
+
             DoQuery();
             if (DisableEvents == false)
             {
                 DataEventAfter?.Invoke(DataEventType.Query);
             }
 
-            MoveFirst();
+            if (Reposition == false)
+            {
+                MoveFirst();
+                return;
+            }
+            else
+            {
+                if (OldRowCount ==this.mRowCount)
+                    MoveTo(OldPosition);
+            }
         }
 
         public void ResetDataTable()
@@ -8548,6 +8769,7 @@ namespace BasicDAL
                     {
                         CurrencyManager.Position = -1;
                     }
+
                 }
                 catch
                 {
@@ -9447,7 +9669,7 @@ namespace BasicDAL
                     for (int i = 0; i < mDbColumns.Count; i++)
                     {
                         DbColumn tmp = mDbColumns.get_Item(i);
-                        AddNewLoopDbColumn(ref tmp);
+                        AddNewDbColumn(ref tmp);
                         mDbColumns.set_Item(i, tmp);
                     }
                 }
@@ -9456,7 +9678,7 @@ namespace BasicDAL
                     System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
                     {
                         DbColumn _dbcolumn = mDbColumns.get_Item(_iColumn);
-                        AddNewLoopDbColumn(ref _dbcolumn);
+                        AddNewDbColumn(ref _dbcolumn);
                     });
                 }
             }
@@ -9469,7 +9691,7 @@ namespace BasicDAL
             return AddNewRet;
         }
 
-        private void AddNewLoopDbColumn(ref DbColumn DbColumn)
+        private void AddNewDbColumn(ref DbColumn DbColumn)
         {
             try
             {
@@ -9488,8 +9710,14 @@ namespace BasicDAL
                         {
                             try
                             {
-                                Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Set, DbColumn.DefaultValue);
-
+                                if (DbColumn.DefaultValue == DBNull.Value)
+                                {
+                                    Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Set, "");
+                                }
+                                else
+                                {
+                                    Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Set, DbColumn.DefaultValue);
+                                }
                             }
                             catch
                             {
@@ -10252,16 +10480,16 @@ namespace BasicDAL
             set
             {
                 ExecutionResult.Context = "DbObject:DbFTableName Set";
-                if (mDbConfig.SupportSquareBrackets == true)
-                {
-                    if (!string.IsNullOrEmpty(value))
-                    {
-                        if (value.ToString().StartsWith("[") == false)
-                            value = "[" + value;
-                        if (value.ToString().EndsWith("]") == false)
-                            value = value + "]";
-                    }
-                }
+                //if (mDbConfig.SupportSquareBrackets == true)
+                //{
+                //    if (!string.IsNullOrEmpty(value))
+                //    {
+                //        if (value.ToString().StartsWith("[") == false)
+                //            value = "[" + value;
+                //        if (value.ToString().EndsWith("]") == false)
+                //            value = value + "]";
+                //    }
+                //}
 
                 mDbTableName = value;
             }
@@ -10301,6 +10529,9 @@ namespace BasicDAL
             string SS = "";
             System.Data.Common.DbParameter p1; // = objFactory.CreateParameter();
             DbParameters.Clear();
+            int _SS = 0;
+            
+            
             foreach (DbColumn currentDbColumn in mDbColumns)
             {
                 dbColumn = currentDbColumn;
@@ -10311,7 +10542,8 @@ namespace BasicDAL
                 //}
 
                 SS = dbColumn.ColumnOrdinal.ToString();
-                //SS = (dbColumn.ColumnOrdinal + 1).ToString();
+                //SS = _SS.ToString();
+
 
                 //if (dbColumn.IsIdentity == false)
                 if (dbColumn.IsReadOnly == false)
@@ -10564,9 +10796,13 @@ namespace BasicDAL
         {
             ExecutionResult.Context = "DbObject:GetDbColumnByColunNameE";
 
-            if (DbColumns.Contains(Name))
+            if (mDbColumns == null)
             {
-                return DbColumns[Name];
+                mDbColumns = GetDbColumnsE();
+            }
+            if (mDbColumns.Contains(Name))
+            {
+                return mDbColumns[Name];
             }
             else
             {
@@ -10580,9 +10816,12 @@ namespace BasicDAL
         public DbColumn GetDbColumnByDbColumnName(string Name)
         {
             ExecutionResult.Context = "DbObject:GetDbColumnByColunName";
-           
 
-            foreach (DbColumn DbColumn in GetDbColumns())
+            if (mDbColumns == null)
+            {
+                mDbColumns = GetDbColumnsE();
+            }
+            foreach (DbColumn DbColumn in mDbColumns)
             {
                 if (DbColumn.DbColumnName.Trim().ToUpper() == Name.Trim().ToUpper())
                 {
@@ -10596,8 +10835,11 @@ namespace BasicDAL
         public DbColumn GetDbColumnByDbColumnPropertyName(string Name)
         {
             ExecutionResult.Context = "DbObject:GetDbColumnByDbColumnPropertyName";
-           
-            foreach (DbColumn DbColumn in GetDbColumns())
+            if (DbColumns == null)
+            {
+                mDbColumns = GetDbColumnsE();
+            }
+            foreach (DbColumn DbColumn in mDbColumns)
             {
                 if (DbColumn.Name.Trim().ToUpper() == Name.Trim().ToUpper())
                 {
@@ -10611,9 +10853,9 @@ namespace BasicDAL
         public DbColumn GetDbColumn(string Name)
         {
             ExecutionResult.Context = "DbObject:GetDbColumn";
-            if (DbColumns == null)
+            if (mDbColumns == null)
             {
-                DbColumns = GetDbColumnsE();
+                mDbColumns = GetDbColumnsE();
             }
             try
             {
@@ -10898,7 +11140,7 @@ namespace BasicDAL
 
         public bool CheckForDataChange()
         {
-            bool CheckForDataChangeRet = default;
+            bool CheckForDataChangeRet = false;
             ExecutionResult.Context = "DbObject:CheckForDataChange";
             if (mIsReadOnly == true)
                 return CheckForDataChangeRet;
@@ -10939,7 +11181,7 @@ namespace BasicDAL
                 return false;
             }
         }
-
+              
         public int Update()
         {
             ExecutionResult.Context = "DbObject:Update";
@@ -10953,7 +11195,8 @@ namespace BasicDAL
             int AffectedRecords = 0;
             ExecutionResult.Reset();
             ExecutionResult.Context = "DbObject:Update";
-
+            
+            this.HideValidationLabelControls();
 
             if (mAddNewStatus == true)
             {
@@ -10973,6 +11216,7 @@ namespace BasicDAL
                     DataEventAfter?.Invoke(DataEventType.Update);
                 }
 
+                
                 return AffectedRecords;
             }
 
@@ -10995,6 +11239,7 @@ namespace BasicDAL
             {
                 case DbObjectTypeEnum.Table:
                 case DbObjectTypeEnum.SQLQuery:
+                case DbObjectTypeEnum.View:
                     {
                         break;
                     }
@@ -11034,13 +11279,26 @@ namespace BasicDAL
                         UpdateDbColumnsDataBinding(ref Row, ref _dbcolumn, ref lobjCommand, UpdateBoundControlsBehaviour);
                     });
                 }
-                else
+                else  // DataBinding
                 {
                     for (int _i = 0; _i < mDbColumns.Count; _i++)
                     {
                         DbColumn _dbColumn = mDbColumns.get_Item(_i);
                         UpdateDbColumnsDataBinding(ref Row, ref _dbColumn, ref lobjCommand, UpdateBoundControlsBehaviour);
                         mDbColumns.set_Item(_i, _dbColumn);
+                    }
+                    if (this.DisableEvents == false)
+                    {
+                        Cancel = false;
+                        DataEventBefore?.Invoke(DataEventType.AfterUpdateBinding, ref Cancel);
+                        if (Cancel == true)
+                            return 0;
+                        System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
+                        {
+                            DbColumn _iDbColumn = mDbColumns.get_Item(_iColumn);
+                            UpdateDbColumnsNoDataBinding(ref _iDbColumn, ref lobjCommand);
+                        });
+
                     }
 
                 }
@@ -11056,10 +11314,11 @@ namespace BasicDAL
             }
 
 
+          
+
             if (UpdateBatchEnabled == true)
             {
                 CurrentDataRow = objDataTable.Rows[(int)mCurrentPosition];
-                // this.UpdateBatch();
                 mAddNewStatus = false;
                 mRowCount = objDataTable.Rows.Count;
                 if (DisableEvents == false)
@@ -11163,8 +11422,18 @@ namespace BasicDAL
                             {
                                 //value = Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Get);
                                 value = Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Get);
+
+                                if (_dbColumn.EmptyEditMaskValue != "")
+                                {
+                                    if (value.Equals(_dbColumn.EmptyEditMaskValue))
+                                        value = "";
+                                }
+
                                 try
                                 {
+
+                                    
+
                                     _dbColumn.Value = Utilities.DbValueCast(value, _dbColumn.DbType, NullDateValue, _dbColumn.DateTimeResolution);
                                     rowvalue = _dbColumn.Value;
                                     switch (mDbConfig.Provider)
@@ -11272,12 +11541,13 @@ namespace BasicDAL
                 _zValue = _idbColumn.OriginalValue;
             }
 
+            string ParameterName = mDbConfig.ParameterNamePrefixE + _idbColumn.ColumnOrdinal.ToString();
             if (_idbColumn.IsReadOnly == false)
             {
                 try
                 {
-                    //lobjCommand.Parameters[mDbConfig.ParameterNamePrefixE + _idbColumn.ColumnOrdinal.ToString()].Value = ConvertParameterValue(_idbColumn, _xValue);
-                    lobjCommand.Parameters[_idbColumn.ColumnOrdinal].Value = ConvertParameterValue(_idbColumn, _xValue);
+                    lobjCommand.Parameters[ParameterName ].Value = ConvertParameterValue(_idbColumn, _xValue);
+                    //lobjCommand.Parameters[_idbColumn.ColumnOrdinal].Value = ConvertParameterValue(_idbColumn, _xValue);
                 }
                 catch
                 {
@@ -11289,7 +11559,7 @@ namespace BasicDAL
             {
                 if (_idbColumn.IsPrimaryKey)
                 {
-                    lobjCommand.Parameters[mDbConfig.ParameterNamePrefixE + _idbColumn.ColumnOrdinal.ToString() + "_ShadowValue"].Value = ConvertParameterValue(_idbColumn, _zValue);
+                    lobjCommand.Parameters[ParameterName  + "_ShadowValue"].Value = ConvertParameterValue(_idbColumn, _zValue);
                 }
             }
             catch
@@ -11831,6 +12101,7 @@ namespace BasicDAL
             {
                 bool CanBound = false;
                 dbColumn.Value = null;
+                object _value = "";
                 if (PreserveShadowValue == false)
                 {
                     dbColumn.OriginalValue = dbColumn.Value;
@@ -11871,10 +12142,73 @@ namespace BasicDAL
                         {
                             try
                             {
-                                Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Set, null);
+                                switch (dbColumn .DbType)
+                                {
+                                    case DbType.AnsiString:
+                                    case DbType.AnsiStringFixedLength:
+                                    case DbType.StringFixedLength:
+                                    case DbType.String:
+
+                                        break;
+                                    case DbType.Binary:
+                                        break;
+                                    case DbType.Byte:
+                                        break;
+                                    case DbType.Boolean:
+                                        break;
+                                    case DbType.Currency:
+                                        break;
+                                    case DbType.Date:
+                                    case DbType.DateTime:
+                                    case DbType.DateTime2:
+                                        _value = this.mNullDateValue;
+                                        break;
+                                    case DbType.DateTimeOffset:
+                                        break;
+
+
+                                    case DbType.Decimal:
+                                        break;
+                                    case DbType.Double:
+                                        break;
+                                    case DbType.Guid:
+                                        break;
+                                    case DbType.Int16:
+                                        break;
+                                    case DbType.Int32:
+                                        break;
+                                    case DbType.Int64:
+                                        break;
+                                    case DbType.Object:
+                                        break;
+                                    case DbType.SByte:
+                                        break;
+                                    case DbType.Single:
+                                        break;
+                                    case DbType.Time:
+                                        break;
+
+                                    case DbType.UInt16:
+                                        break;
+                                    case DbType.UInt32:
+                                        break;
+                                    case DbType.UInt64:
+                                        break;
+                                    case DbType.VarNumeric:
+                                        break;
+                            
+                                    case DbType.Xml:
+                                        break;
+                                    default:
+                                        break;
+                                }
+                                //Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Set, null);
+                                Interaction.CallByName(BoundControl.Control, BoundControl.PropertyName, CallType.Set, _value  );
+
                             }
                             catch
                             {
+                                throw;
                             }
                         }
                     }
@@ -11912,6 +12246,7 @@ namespace BasicDAL
                     DataEventAfter?.Invoke(DataEventType.Binding);
                     if (this.mDataBinding == DataBoundControlsBehaviour.BasicDALDataBinding)
                     {
+                       
                         BoundCompleted?.Invoke();
                         DataEventAfter?.Invoke(DataEventType.ControlsBinding);
                     }
@@ -11928,11 +12263,25 @@ namespace BasicDAL
 
             // Dim t As DateTime = Now
             // USA SEMPRE CODICE PARALLELO 
-            System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
-                {
-                    DbColumn _iDbColumn = mDbColumns.get_Item(_iColumn);
-                    DataRowGetDbColumnValue(ref _iDbColumn, ref DataRow, isDataRowValid);
-                });
+
+            //if (UseParallelism == true)
+            {
+                System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
+                    {
+                        DbColumn _iDbColumn = mDbColumns.get_Item(_iColumn);
+                        DataRowGetDbColumnValue(ref _iDbColumn, ref DataRow, isDataRowValid);
+                    });
+            }
+            //else
+            //{
+            //    // VECCHIO CODICE SEQUENZIALE
+            //    for (int _i = 0; _i < mDbColumns.Count; _i++)
+            //    {
+            //        DbColumn _iDbColumn = mDbColumns.get_Item(_i);
+            //        DataRowGetDbColumnValue(ref _iDbColumn, ref DataRow, isDataRowValid);
+            //    }
+            //}
+
             if (this.mDataBinding == DataBoundControlsBehaviour.BasicDALDataBinding)
             {
                 Cancel = false;
@@ -11956,9 +12305,7 @@ namespace BasicDAL
                 }
                 else
                 {
-
                     // VECCHIO CODICE SEQUENZIALE
-
                     for (int _i = 0; _i < mDbColumns.Count; _i++)
                     {
                         DbColumn _dbColumn = mDbColumns.get_Item(_i);
@@ -12068,14 +12415,21 @@ namespace BasicDAL
                         {
                             switch (_iDbColumn.DbType)
                             {
-                                case DbType.Date:
                                 case DbType.Time:
+                                    {
+                                        //Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Set, (object)NullDateValue);
+                                        Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Set, "");
+                                        break;
+                                    }
+
+                                case DbType.Date:
                                 case DbType.DateTime:
                                 case DbType.DateTime2:
                                 case DbType.DateTimeOffset:
 
                                     {
-                                        Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Set, (object)NullDateValue);
+                                        //Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Set, (object)NullDateValue);
+                                        Interaction.CallByName(_BoundControl.Control, _BoundControl.PropertyName, CallType.Set, "");
                                         break;
                                     }
 
@@ -12098,6 +12452,7 @@ namespace BasicDAL
         {
             if (IsDataRowValid && DataRow.RowState!= DataRowState.Deleted)
             {
+   
                 if (ReferenceEquals(DataRow[_iDbColumn.DbColumnNameE], DBNull.Value))
                 {
                     _iDbColumn.ValueNoUpdateCurrentDataRow = null;
@@ -12220,9 +12575,9 @@ namespace BasicDAL
             mRedirectErrorsNotificationTo = DbConfig.RedirectErrorsNotificationTo;
             mOnlyEntityInitialization = DbConfig.OnlyEntityInitialization;
             mNullDateValue = DbConfig.NullDateValue;
-            RuntimeUI = DbConfig.RuntimeUI;
+            //RuntimeUI = DbConfig.RuntimeUI;
             ValidatorLabelControl = DbConfig.ValidatorLabelControl;
-
+            
 
             try
             {
@@ -12268,6 +12623,36 @@ namespace BasicDAL
                     mDbColumns = GetDbColumns();
                 }
 
+
+                // riallienea DbColumNameE per DB2
+
+                switch (provider)
+                {
+                    case Providers.SqlServer:
+                        break;
+                    case Providers.OleDb:
+                        break;
+                    case Providers.OracleDataAccess:
+                        break;
+                    case Providers.ODBC:
+                        break;
+                    case Providers.ConfigDefined:
+                        break;
+                    case Providers.ODBC_DB2:
+                    case Providers.OleDb_DB2:
+                    case Providers.DB2_iSeries:
+                        System.Threading.Tasks.Parallel.For(0, mDbColumns.Count, _iColumn =>
+                        {
+                            mDbColumns[_iColumn].DbColumnNameE = mDbColumns[_iColumn].DbColumnName;
+                        });
+                        break;
+                    case Providers.MySQL:
+                        break;
+                    default:
+                        break;
+                }
+
+               
                 if (mOnlyEntityInitialization == false)
                 {
                     GetDbSchema(ConnectionState.CloseOnExit);
@@ -12528,15 +12913,16 @@ namespace BasicDAL
         //    CaseSensitiveQuery(false);
         //}
 
-        public void EnsureValidationRules()
+        public void EnsureValidationRules(object ValidatorLabelControl)
         {
-            switch (RuntimeUI)
+            switch (this.DbConfig.RuntimeUI)
             {
                 case RuntimeUI.Wisej:
                     {
                         if (ValidatorLabelControl is null)
                         {
-                            ValidatorLabelControl = Activator.CreateInstance(Type.GetType("Wisej.Web.Label"));
+                            
+                            ValidatorLabelControl = Activator.CreateInstance(ValidatorLabelControl .GetType());
                         }
 
                         break;
@@ -12559,7 +12945,7 @@ namespace BasicDAL
             }
 
             mDbColumnsWithValidator = new List<DbColumn>();
-            switch (RuntimeUI)
+            switch (this.DbConfig .RuntimeUI)
             {
                 case RuntimeUI.Service:
                     {
@@ -12599,8 +12985,8 @@ namespace BasicDAL
                                         evt_Click.RemoveEventHandler(ValidatorLabel, new EventHandler(ValidatorLabel_Click));
                                         evt_Click.AddEventHandler(ValidatorLabel, new EventHandler(ValidatorLabel_Click));
                                         dynamic evt_Leave = BoundControl.Control.GetType().GetEvent("Leave");
-                                        evt_Leave -= BoundControl.Control.eAddNewEventHandler(DbColumn.ValidateBoundControls());
-                                        evt_Leave += BoundControl.Control.eAddNewEventHandler(DbColumn.ValidateBoundControls());
+                                        //evt_Leave -= BoundControl.Control.eAddNewEventHandler(DbColumn.ValidateBoundControls());
+                                        //evt_Leave += BoundControl.Control.eAddNewEventHandler(DbColumn.ValidateBoundControls());
                                         BoundControl.ValidationLabelControl = ValidatorLabel;
                                     }
 
@@ -12641,9 +13027,10 @@ namespace BasicDAL
         {
             // torna 0 se tutti i controlli sono validi
             int i = 0;
+            this.HideValidationLabelControls();
             if (mDataBinding == DataBoundControlsBehaviour.BasicDALDataBinding)
             {
-                foreach (DbColumn DbColumn in mDbColumnsWithValidator)
+                foreach (DbColumn DbColumn in mDbColumns )
                 {
                     if (DbColumn.ValidationType != ValidationTypes.None)
                     {
@@ -12654,8 +13041,8 @@ namespace BasicDAL
                     }
                 }
             }
-
-            return Convert.ToInt32(i);
+            
+            return i;
         }
         #endregion
 
@@ -13633,6 +14020,12 @@ namespace BasicDAL
                     case DbObjectTypeEnum.ScalarFunction:
                         {
                             objStoredProcedureCommand.CommandText = "SELECT " + mDbFunctionName;
+
+                            if (mDbConfig .Provider ==  Providers.DB2_iSeries )
+                            {
+                                objStoredProcedureCommand.CommandText = "VALUES " + mDbFunctionName;
+                            }
+                            
                             break;
                         }
 
@@ -13686,7 +14079,10 @@ namespace BasicDAL
                     if (ds.Tables.Count > 0)
                     {
                         ds.Tables[0].TableName = DbTableName;
-                        ds.Tables[0].Columns[0].ColumnName = "RETURN_VALUE";
+                        if (mDbObjectType == DbObjectTypeEnum.ScalarFunction)
+                        {
+                            ds.Tables[0].Columns[0].ColumnName = "RETURN_VALUE";
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -15591,7 +15987,7 @@ namespace BasicDAL
                                     default:
                                         break;
                                 }
-
+                                Array.Resize(ref lFields, i+1);
                                 lFields[i].Name = mProperty.Name;
                                 lFields[i].Type = mProperty.PropertyType.GetType();
                                 lFields[i].TypeName = mProperty.PropertyType.Name.ToUpper();
@@ -15633,7 +16029,7 @@ namespace BasicDAL
                 case InterfaceModeEnum.Private:
                     {
                         mFields = rGetFields(this);
-                        lFields = new Field[mFields.Length + 1];
+                        //lFields = new Field[mFields.Length + 1];
                         //foreach (var currentMField in mFields)
                         foreach (FieldInfo mField in mFields)
                         {
@@ -15663,8 +16059,8 @@ namespace BasicDAL
                                         break;
                                 }
 
-
-
+                                Array.Resize(ref lFields, i+1);
+                                
                                 lFields[i].Name = mField.Name;
                                 lFields[i].Type = mField.FieldType.GetType();
                                 lFields[i].TypeName = mField.FieldType.Name;
@@ -15698,10 +16094,10 @@ namespace BasicDAL
                     }
             }
 
-            if (i > 1)
-            {
-                Array.Resize(ref lFields, i);
-            }
+            //if (i > 1)
+            //{
+            //    Array.Resize(ref lFields, i);
+            //}
 
             GetFieldsRet = lFields;
             FieldsList = s_FieldList.ToString();
@@ -16092,6 +16488,10 @@ namespace BasicDAL
 
         public bool Add(DbFilter Filter)
         {
+            return AddFilter(Filter);
+        }
+        public bool AddFilter(DbFilter Filter)
+        {
             try
             {
                 List.Add(Filter);
@@ -16102,8 +16502,26 @@ namespace BasicDAL
                 return false;
             }
         }
-
         public bool Add(DbColumn DbColumn, ComparisionOperator ComparisionOperator, object Value, LogicOperator LogicOperator = LogicOperator.None)
+        {
+            //var Filter = new DbFilter();
+            //Filter.DbColumn = DbColumn;
+            //Filter.LogicOperator = LogicOperator;
+            //Filter.ComparisionOperator = ComparisionOperator;
+            //Filter.Value = Value;
+            //try
+            //{
+            //    List.Add(Filter);
+            //    return true;
+            //}
+            //catch
+            //{
+            //    return false;
+            //}
+            return AddFilter (DbColumn ,ComparisionOperator ,Value, LogicOperator); 
+
+        }
+        public bool AddFilter(DbColumn DbColumn, ComparisionOperator ComparisionOperator, object Value, LogicOperator LogicOperator = LogicOperator.None)
         {
             var Filter = new DbFilter();
             Filter.DbColumn = DbColumn;
@@ -16120,6 +16538,7 @@ namespace BasicDAL
                 return false;
             }
         }
+
 
         public bool AddBoundControl(DbColumn DbColumn, ComparisionOperator ComparisionOperator, object BoundControl, string PropertyName, LogicOperator LogicOperator = LogicOperator.None)
         {
@@ -18470,7 +18889,10 @@ namespace BasicDAL
         public static bool Required(object Value)
         {
             bool Validation = false;
-            if (Value is object)
+            if (Value == null)
+                return Validation;
+
+            if (Value.ToString().Trim() !="" )
             {
                 Validation = true;
             }
@@ -18869,7 +19291,14 @@ namespace BasicDAL
     public sealed class Utilities
     {
 
-       public static TValue GetPropertyAttributeValue<T, TOut, TAttribute, TValue>(
+        public static int GetRandomNumber(int Min, int Max)
+        {
+            var random = new Random(DateTime.Now.Millisecond);
+            int numero = random.Next(Min, Max);
+            return numero;
+        }
+
+        public static TValue GetPropertyAttributeValue<T, TOut, TAttribute, TValue>(
                                                         Expression<Func<T, TOut>> propertyExpression,
                                                         Func<TAttribute, TValue> valueSelector)
                                  where TAttribute : Attribute
@@ -18950,7 +19379,74 @@ namespace BasicDAL
 
         public static class StringHelper
         {
+            public static string GetDaysNumbersOfWeekFromDaysNames(string DaysNames, string CultureName)
+            {
+                DaysNames = DaysNames.ToUpper();
+                string _days = "";
+                string[] days = DaysNames.Split(';');
 
+                CultureInfo cultureInfo = new CultureInfo(CultureName);
+                DateTimeFormatInfo dtfi = cultureInfo.DateTimeFormat;
+
+                dtfi.FirstDayOfWeek = DayOfWeek.Monday;
+                
+                foreach (string day in days)
+                {
+                    if (day != "")
+                    {
+                        for (int i = 0; i < dtfi.ShortestDayNames.Length; i++)
+                        {
+                            string _day = dtfi.ShortestDayNames[i].ToUpper();
+                            if (_day  == day)
+                            {
+                                _days = _days + i.ToString ()+ ";";
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (_days.EndsWith(";"))
+                    _days = _days.Substring(0, _days.Length - 1);
+
+
+                return _days;
+
+
+
+            }
+            public static string GetDaysNamesOfWeekFromDaysNumbers(string DaysNumbers, string CultureName )
+            {
+                if (DaysNumbers == "")
+                    return "";
+
+                string _days = "";
+                string[] days = DaysNumbers.Split(';');
+
+
+                CultureInfo cultureInfo = new CultureInfo(CultureName);
+                DateTimeFormatInfo dtfi = cultureInfo.DateTimeFormat;
+
+                dtfi.FirstDayOfWeek = DayOfWeek.Monday;
+
+                foreach (string _day in days )
+                {
+                    string day = _day;
+                    if (day == "7")
+                        day = "0";
+
+                    _days = _days + dtfi.ShortestDayNames[Convert.ToInt16(day)].ToUpper()+";";
+                }
+
+                if (_days .EndsWith(";"))
+                    _days  = _days.Substring(0, _days.Length - 1);
+
+
+                return _days;
+
+
+
+            }
             public static string SequenceFrom(string value)
             {
                 char chr;
@@ -19197,6 +19693,19 @@ namespace BasicDAL
 
         public static class ProcessHelper
         {
+
+            public static void DelayProcess(int Milliseconds)
+            {
+                Task.Run(async delegate
+                {
+                    await _DelayProcess(Milliseconds);
+                }).Wait();
+            }
+            public static async Task _DelayProcess(int Milliseconds)
+            {
+                // Wait for 5 seconds
+                await Task.Delay(Milliseconds );
+            }
 
             public static System.Diagnostics.Process GetCurrentProcess()
             {
@@ -19845,6 +20354,20 @@ namespace BasicDAL
                 }
             }
 
+            public static string SerializeToJson(object objectToSerialize, Formatting formatting=  Formatting.None)
+            {
+                string JSONString = string.Empty;
+                JSONString = JsonConvert.SerializeObject(objectToSerialize, Formatting.None);
+                return JSONString;
+
+            }
+
+           public static T DeSerializeFromJson<T>(string value)
+           {
+                return JsonConvert.DeserializeObject<T>(value);
+
+           }
+
             public static string SerializeObjectToXMLString(object Object)
             {
                 try
@@ -20483,13 +21006,15 @@ namespace BasicDAL
 
                         case DbType.Time:
                             {
-                                if (Value == null)
+                                if (Value == null | Value.Equals(DBNull.Value))
                                 {
-                                    CastRet = TimeSpan.Parse("00:00:00");
+                                    //CastRet = TimeSpan.Parse("00:00:00");
+                                    CastRet = new TimeSpan();
                                 }
+                            
                                 //CastRet = (Timespan)Convert.ToDateTime(Value);
                                 CastRet= TimeSpan.Parse(Value.ToString());
-                            break;
+                                break;
                             }
 
                         case DbType.Double:
@@ -21767,6 +22292,7 @@ namespace BasicDAL
             Binding = 10,
             BindingFromDataReader = 11,
             ControlsBinding = 12,
+            AfterUpdateBinding=13,
             MoveFirst = 100,
             MovePrevious = 101,
             MoveLast = 102,
